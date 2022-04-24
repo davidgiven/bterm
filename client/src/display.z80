@@ -17,13 +17,13 @@
 
 DPYINIT:
     ld a, 10
-    out0a VIDEO_ADDR
+    out0 (VIDEO_ADDR), a
     ld a, 0x60
-    out0a VIDEO_DATA
+    out0 (VIDEO_DATA), a
     ld a, 11
-    out0a VIDEO_ADDR
+    out0 (VIDEO_ADDR), a
     ld a, 0xff
-    out0a VIDEO_DATA
+    out0 (VIDEO_DATA), a
     ret
 
 ; A = char; DE = (y, x)
@@ -76,14 +76,14 @@ DPYCURS:
     ld l, a                 ; address -> hl
 
     ld a, 15
-    out0a VIDEO_ADDR
+    out0 (VIDEO_ADDR), a
     nop
-    out0l VIDEO_DATA
+    out0 (VIDEO_DATA), l
     ld a, 14
-    out0a VIDEO_ADDR
+    out0 (VIDEO_ADDR), a
     ld a, h
     and $0f
-    out0a VIDEO_DATA
+    out0 (VIDEO_DATA), a
 
     ret
 
@@ -156,9 +156,9 @@ DPYCLRL:
 ; Flushes the backbuffer to the frontbuffer, if safe.
 DPYFLSH:
     ld a, 31
-    out0a VIDEO_ADDR
+    out0 (VIDEO_ADDR), a
     nop
-    in0a VIDEO_DATA
+    in0 a, (VIDEO_DATA)
     and 0x02
     ret z
 
