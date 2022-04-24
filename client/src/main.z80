@@ -1,0 +1,55 @@
+	extern TTYPUTC
+    extern DPYFLSH
+    extern DPYINIT
+    extern INTINIT
+    extern INTREAD
+    extern INTSTAT
+    extern INTWRIT
+    extern KBDINIT
+    extern KBDPULL
+    extern KBDPUSH
+    extern TTYINIT
+
+	global ADDAHL
+	global ADDADE
+
+	cseg
+entry:
+    call DPYINIT
+    call TTYINIT
+	call INTINIT
+    call KBDINIT
+
+loop:
+    call DPYFLSH
+
+	call INTREAD        ; byte -> c
+    call TTYPUTC        ; print c
+
+    call KBDPUSH        ; keyboard -> ring buffer
+
+    call INTSTAT        ; returns z if interface is writeable
+    jr nz, .1
+    call KBDPULL        ; ring buffer -> c
+    call INTWRIT        ; c -> interface
+.1
+
+	jr loop
+	ret
+
+ADDAHL:
+    add a, l
+    ld l, a
+    ret nc
+    inc h
+    ret
+
+ADDADE:
+    add a, e
+    ld e, a
+    ret nc
+    inc d
+    ret
+
+; vim: ts=4 sw=4 et ft=asm
+

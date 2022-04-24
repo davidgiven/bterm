@@ -1,0 +1,211 @@
+    global DPYCURS
+    global DPYDELL
+    global DPYINIT
+    global DPYINSL
+    global DPYCLRL
+    global DPYPRNA
+    global DPYPRNU
+    global DPYFLSH
+
+    extern ADDAHL
+    extern ADDADE
+
+    maclib constants
+    maclib z180
+
+	cseg
+
+DPYINIT:
+    ld a, 10
+    out0a VIDEO_ADDR
+    ld a, 0x60
+    out0a VIDEO_DATA
+    ld a, 11
+    out0a VIDEO_ADDR
+    ld a, 0xff
+    out0a VIDEO_DATA
+    ret
+
+; A = char; DE = (y, x)
+DPYPRNA:
+    ; Convert ASCII value
+    sub 0x20
+    ld hl, character_map_table
+    call ADDAHL
+    ld c, (hl)              ; screencode
+
+    ; Write
+    call calc_backbuffer_address
+    ld (hl), c
+    ret
+
+; Given a cursor location in de, calculates the address in hl.
+calc_backbuffer_address:
+    ; Calculate line address
+    ld hl, back_buffer_address_table
+    ld a, d
+    call ADDAHL             ; (address) -> hl
+
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a                 ; address -> hl
+
+    ; Calculate address of cursor
+    ld a, e
+    jp ADDAHL
+
+; HL = char; DE = (y, x)
+DPYPRNU:
+    ret
+
+; On entry: DE = (y, x)
+DPYCURS:
+    ; Calculate video memory line address
+    ld hl, video_memory_address_table
+    ld a, d
+    call ADDAHL             ; address -> hl
+
+    ; Calculate address of cursor
+    ld a, e
+    call ADDAHL             ; (address) -> hl
+
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a                 ; address -> hl
+
+    ld a, 15
+    out0a VIDEO_ADDR
+    nop
+    out0l VIDEO_DATA
+    ld a, 14
+    out0a VIDEO_ADDR
+    ld a, h
+    and $0f
+    out0a VIDEO_DATA
+
+    ret
+
+; On entry: DE = (y, x)
+DPYDELL:
+    ld a, SCREEN_HEIGHT-1
+    cp d
+    jr z, blank_last_line   ; on the last line?
+
+    ld e, 0                 ; x = 0
+    call calc_backbuffer_address ; line address -> hl
+
+    ex de, hl               ; line address -> de
+    ld hl, back_buffer_end - SCREEN_WIDTH
+    ccf
+    sbc hl, de
+    ld b, h
+    ld c, l                 ; amount to copy -> bc
+
+    ld h, d
+    ld l, e
+    ld a, SCREEN_WIDTH
+    call ADDAHL             ; line+1 -> hl, line -> de
+    ldir                    ; [hl] -> [de]
+
+blank_last_line:
+    ld hl, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH
+    ld de, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + 1
+    ld bc, SCREEN_WIDTH - 1
+    ld (hl), ' '
+    ldir
+    ret
+
+; On entry: DE = (y, x)
+DPYINSL:
+    ld a, SCREEN_HEIGHT-1
+    cp d
+    jr z, blank_last_line   ; on the last line?
+
+    ld e, 0                 ; x = 0
+    call calc_backbuffer_address ; line address -> hl
+
+    ex de, hl               ; line address -> de
+    ld hl, back_buffer_end - SCREEN_WIDTH
+    ccf
+    sbc hl, de
+    ld b, h
+    ld c, l                 ; amount to copy -> bc
+
+    ld hl, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
+    ld de, back_buffer + (SCREEN_HEIGHT-2)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
+    lddr                    ; [hl] -> [de]
+
+    jr blank_last_line
+
+; On entry: DE = (y, x)
+DPYCLRL:
+    ld e, 0                 ; x = 0
+    call calc_backbuffer_address
+
+    ld d, h
+    ld e, l
+    inc de
+    ld (hl), '0'
+    ld bc, SCREEN_WIDTH - 1
+    ldir
+
+    ret
+
+; Flushes the backbuffer to the frontbuffer, if safe.
+DPYFLSH:
+    ld a, 31
+    out0a VIDEO_ADDR
+    nop
+    in0a VIDEO_DATA
+    and 0x02
+    ret z
+
+    ld de, VIDEORAM_BASE
+    ld hl, back_buffer
+
+    rept SCREEN_HEIGHT
+        ld bc, SCREEN_WIDTH
+        ldir
+        ld a, SCREEN_STRIDE - SCREEN_WIDTH
+        call ADDADE
+    endm
+    ret
+
+; Maps from ASCII (minus $20) to the Brother character set.
+
+character_map_table:
+    db ' ', '!', '"', '#', '$', '%', '&', $27
+    db '(', ')', '*', '+', ',', '-', '.', '/'
+    db '0', '1', '2', '3', '4', '5', '6', '7'
+    db '8', '9', ':', ';', '<', '=', '>', '?'
+    db '@', 'A', 'B', 'C', 'D', 'E', 'F', 'G'
+    db 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'
+    db 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W'
+    db 'X', 'Y', 'Z', '[', $eb, ']', $8b, '_'
+    db $8d, 'a', 'b', 'c', 'd', 'e', 'f', 'g'
+    db 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o'
+    db 'p', 'q', 'r', 's', 't', 'u', 'v', 'w'
+    db 'x', 'y', 'z', $cc, $9b, $cd, $8f, $0d
+
+back_buffer_address_table:
+    line_no = 0
+    rept SCREEN_HEIGHT
+        dw back_buffer + line_no*SCREEN_HEIGHT
+        line_no = line_no + 1
+    endm
+
+video_memory_address_table:
+    line_no = 0
+    rept SCREEN_HEIGHT
+        dw VIDEORAM_BASE + line_no
+        line_no = line_no + SCREEN_STRIDE
+    endm
+
+    dseg
+back_buffer: ds SCREEN_WIDTH * SCREEN_HEIGHT
+back_buffer_end:
+
+; vim: ts=4 sw=4 et ft=asm
+

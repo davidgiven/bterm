@@ -1,0 +1,7 @@
+    aseg
+	org 0x0000
+	incbin "bterm.img"
+
+    org 0x0c00
+    incbin "boot.cim"
+

@@ -1,0 +1,171 @@
+    global KBDINIT
+    global KBDPULL
+    global KBDPUSH
+    global KBDTYPE
+
+    extern ADDAHL
+
+    maclib z180
+
+MODIFIER_BIT_SHIFT = 0
+MODIFIER_BIT_CTRL = 1
+MODIFIER_BIT_CAPS = 2
+
+	cseg
+
+; Initialises the keyboard.
+KBDINIT:
+    ld a, 0xff
+    out0a 0xd8
+
+    in0a 0x88               ; enable keyboard?
+    and 0x02
+    out0a 0x88
+
+    ld a, 00100111b         ; RE enable, external clock
+    out0a CNTR
+    ret
+
+; Reads a keyboard scancode, and if one's present, converts
+; it and pushes it.
+KBDPUSH:
+    in0c CNTR
+    bit 5, c                ; test RE clear
+    ret nz                  ; do nothing if no key waiting
+
+    in0a TRDR               ; scancode -> a
+    ld c, 00100111b         ; RE enable, external clock
+    out0c CNTR
+
+    call convert_scancode   ; convert to 'ASCII'
+    bit 7, a                ; test high bit
+    jr z, KBDTYPE           ; really ASCII, so just type it
+
+    ; TODO: convert extended keys
+    ret
+
+; Type the character in A
+KBDTYPE:
+    ld c, a
+    ld de, (read_ptr)       ; read ptr -> e, write ptr -> d
+
+    ; If (write_ptr+1) == read_ptr, then the buffer is full.
+
+    ld a, d
+    inc a
+    cp e
+    ret z                   ; buffer is full
+
+    ld hl, keyboard_buffer
+    ld a, d
+    call ADDAHL
+    ld (hl), c              ; write key
+
+    inc d
+    ld (read_ptr), de       ; update write ptr
+    ret
+
+; Pulls a value out of the ring buffer into C. 0 if nothing.
+KBDPULL:
+    ld de, (read_ptr)       ; read ptr -> e, write ptr -> d
+
+    ; If read_ptr == write_ptr, then the buffer is empty.
+
+    ld c, 0
+    ld a, d
+    cp e
+    ret z                   ; buffer is empty
+
+    ld hl, keyboard_buffer
+    ld a, e
+    call ADDAHL
+    ld c, (hl)              ; read key
+
+    inc e
+    ld (read_ptr), de       ; update read ptr
+    ret
+
+convert_scancode:
+    ; Use the keyboard map to convert the scancode in A into 'ASCII'.
+
+    ld b, a
+    and 0x7f
+    jr z, ctrl_change       ; CTRL = keycode 0
+    dec a
+    jr z, shift_change      ; SHIFT = keycode 1
+
+    xor a
+    bit 7, b
+    ret nz                  ; ignore keyups
+
+    ld a, b
+    cp 0x02
+    jr z, caps_pressed
+
+    ld c, b
+    ld b, 0
+    ld a, (keyboard_modifiers)
+    ld hl, keyboard_normal_map
+    bit MODIFIER_BIT_SHIFT, a
+    jr z, shift_not_pressed
+    ld hl, keyboard_shifted_map
+shift_not_pressed:
+    add hl, bc
+    ld a, (hl)              ; pull the ASCII value from the keymap
+
+    ld hl, keyboard_modifiers
+    bit MODIFIER_BIT_CTRL, (hl)
+    jr z, ctrl_not_pressed
+    and 31
+ctrl_not_pressed:
+
+    bit MODIFIER_BIT_CAPS, (hl)
+    ret z
+    cp 'A'
+    ret c
+    cp 'z'+1
+    ret nc
+    cp 'Z'+1
+    jr c, do_flip_case
+    cp 'a'
+    ret c
+do_flip_case:
+    xor 0x20                ; toggle case bit
+    ret
+
+shift_change:
+    xor a
+    ld hl, keyboard_modifiers
+    res MODIFIER_BIT_SHIFT, (hl)
+    bit 7, b
+    ret nz
+    set MODIFIER_BIT_SHIFT, (hl)
+    ret
+
+ctrl_change:
+    xor a
+    ld hl, keyboard_modifiers
+    res MODIFIER_BIT_CTRL, (hl)
+    bit 7, b
+    ret nz
+    set MODIFIER_BIT_CTRL, (hl)
+    ret
+
+caps_pressed:
+    ld hl, keyboard_modifiers
+    ld a, (hl)
+    xor 1<<MODIFIER_BIT_CAPS
+    ld (hl), a
+    xor a
+    ret
+
+    include 'keymap.inc'
+
+    dseg
+keyboard_modifiers: db 0
+keyboard_buffer: ds 256
+read_ptr:        db 0
+write_ptr:       db 0
+
+; vim: ts=4 sw=4 et ft=asm
+
