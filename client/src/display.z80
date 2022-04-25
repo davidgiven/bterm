@@ -26,12 +26,13 @@ DPYINIT:
     out0 (VIDEO_DATA), a
     ret
 
-; A = char; DE = (y, x)
+; C = char; DE = (y, x)
 DPYPRNA:
     ; Convert ASCII value
+    ld a, c
     sub 0x20
     ld hl, character_map_table
-    call ADDAHL
+    call ADDAHL             ; does not change de
     ld c, (hl)              ; screencode
 
     ; Write
@@ -44,6 +45,7 @@ calc_backbuffer_address:
     ; Calculate line address
     ld hl, back_buffer_address_table
     ld a, d
+    add a
     call ADDAHL             ; (address) -> hl
 
     ld a, (hl)
@@ -64,16 +66,17 @@ DPYCURS:
     ; Calculate video memory line address
     ld hl, video_memory_address_table
     ld a, d
-    call ADDAHL             ; address -> hl
-
-    ; Calculate address of cursor
-    ld a, e
-    call ADDAHL             ; (address) -> hl
+    add a
+    call ADDAHL             ; [address] -> hl
 
     ld a, (hl)
     inc hl
     ld h, (hl)
     ld l, a                 ; address -> hl
+
+    ; Calculate address of cursor
+    ld a, e
+    call ADDAHL             ; address -> hl
 
     ld a, 15
     out0 (VIDEO_ADDR), a
@@ -147,7 +150,7 @@ DPYCLRL:
     ld d, h
     ld e, l
     inc de
-    ld (hl), '0'
+    ld (hl), ' '
     ld bc, SCREEN_WIDTH - 1
     ldir
 
@@ -162,7 +165,7 @@ DPYFLSH:
     and 0x02
     ret z
 
-    ld de, VIDEORAM_BASE
+    ld de, VIDEORAM_BASE + 0x1000
     ld hl, back_buffer
 
     rept SCREEN_HEIGHT
@@ -192,15 +195,15 @@ character_map_table:
 back_buffer_address_table:
     line_no = 0
     rept SCREEN_HEIGHT
-        dw back_buffer + line_no*SCREEN_HEIGHT
+        dw back_buffer + line_no*SCREEN_WIDTH
         line_no = line_no + 1
     endm
 
 video_memory_address_table:
     line_no = 0
     rept SCREEN_HEIGHT
-        dw VIDEORAM_BASE + line_no
-        line_no = line_no + SCREEN_STRIDE
+        dw VIDEORAM_BASE + line_no*SCREEN_STRIDE + 0x1000
+        line_no = line_no + 1
     endm
 
     dseg

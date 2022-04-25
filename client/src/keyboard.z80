@@ -4,6 +4,7 @@
     global KBDTYPE
 
     extern ADDAHL
+    extern TTYTYPD
 
     maclib z180
 
@@ -41,8 +42,46 @@ KBDPUSH:
     bit 7, a                ; test high bit
     jr z, KBDTYPE           ; really ASCII, so just type it
 
-    ; TODO: convert extended keys
-    ret
+    push af
+    ld a, 27
+    call KBDTYPE
+    ld a, '['
+    call KBDTYPE
+    pop bc                  ; key -> b
+
+    ld a, 0x60
+    and b                   ; type bits -> a
+    cp 0x00<<5              ; function key?
+    jr nz, .1
+
+    ld a, 0x1f
+    and b
+    call TTYTYPD
+    ld a, '~'
+    jr KBDTYPE
+.1
+    cp 0x01<<5              ; more function key?
+    jr nz, .2
+
+    ld a, 0x1f
+    and b
+    call TTYTYPD
+    ld a, '$'
+    jr KBDTYPE
+.2
+    cp 0x02<<5              ; cursor key?
+    jr nz, .3
+
+    ld a, 0x1f
+    and b                   ; pull key number
+    add 'A'
+    jr KBDTYPE
+.3
+    ; must be shifted cursor key
+    ld a, 0x1f
+    and b                   ; pull key number
+    add 'a'
+    jr KBDTYPE
 
 ; Type the character in A
 KBDTYPE:

@@ -9,6 +9,8 @@
 
     global TTYPUTC
     global TTYINIT
+    global TTYTYPS
+    global TTYTYPD
 
     maclib constants
 
@@ -25,8 +27,8 @@ state_$name:
 TTYINIT:
     ld hl, 0
     ld (tty_cursorx), hl
-    xor a
-    ld (current_state), a
+    ld hl, state_waiting
+    ld (current_state), hl
     call do_ed_all
     ld de, 0
     jp DPYCURS
@@ -63,10 +65,9 @@ print_ascii:
     sub 27 - 13         ; compare with 27
     jp z, set_state_escape
     sub 32 - 27         ; compare with 32
-    ret z
+    ret c
 
 print_printable:
-    ld a, c
     ld de, (tty_cursorx)
     call DPYPRNA
     ; fall through
@@ -89,6 +90,7 @@ print_utf8:
 ; UTF8_TRAILER: reading UTF-8 trailer bytes
 
 defstate utf8_trailer
+    call set_state_waiting
     ld hl, (utf8_char)
     add hl, hl
     add hl, hl
@@ -376,7 +378,7 @@ do_ed_cursor_to_end:
 
 ; Erase all.
 do_ed_all:
-    ld de, SCREEN_HEIGHT
+    ld de, SCREEN_HEIGHT    ; 0 -> d, SCREEN_HEIGHT -> e
     ; fall through
 ; Erase lines d to e-1.
 erase_lines_d_to_e:
@@ -390,7 +392,7 @@ erase_lines_d_to_e:
     pop de
 
     inc d
-    cp a, d
+    ld a, d
     cp e
     jp nz, .1
     ret
@@ -478,7 +480,7 @@ do_csi_dl:
 ; Identify terminal.
 do_csi_da:
     ld hl, .1
-    jp typeback_hl
+    jp TTYTYPS
 .1:
     db 27, "[?6c", 0
 
@@ -510,7 +512,7 @@ do_csi_dsr:
 
 do_csi_dsr_terminal_status:
     ld hl, .1
-    jp typeback_hl
+    jp TTYTYPS
 .1
     db 27, "[0n", 0
 
@@ -521,12 +523,12 @@ do_csi_dsr_report_cursor_position:
     call KBDTYPE
     ld a, (tty_cursory)
     inc a
-    call typeback_decimal_a
+    call TTYTYPD
     ld a, ';'
     call KBDTYPE
     ld a, (tty_cursorx)
     inc a
-    call typeback_decimal_a
+    call TTYTYPD
     ld a, 'R'
     jp KBDTYPE
     
@@ -677,28 +679,48 @@ scroll_down:
 
 ; --- Reporting -------------------------------------------------------------
 
-; Types out the value in A.
-typeback_decimal_a:
+; Types out the value in A in decimal.
+TTYTYPD:
+    ld d, 0             ; suppress zeroes
 	ld c, -100
 	call .1
 	ld c, -10
 	call .1
     ld c, -1
+    dec d               ; don't suppress this zero
 .1
     ld b, '0'-1
 .2
     inc b
-    add a, c
+    add c
     jr c, .2
     sub c
+
+    ; Did we get a zero?
     push af
     ld a, b
+    cp '0'
+    jr z, .3
+    ; Not a zero.
+    dec d               ; don't suppress zeroes any more
+
+.4
+    push de
+    ld a, b
     call KBDTYPE
+    pop de
     pop af
     ret
 
+    ; We got a zero.
+.3
+    bit 7, d            ; are we suppressing zeroes?
+    jr nz, .4
+    pop af              ; restore stack
+    ret
+
 ; Types out the string pointed to by HL.
-typeback_hl:
+TTYTYPS:
 .1
     ld a, (hl)
     or a

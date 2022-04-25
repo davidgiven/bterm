@@ -8,10 +8,32 @@
 static unsigned char normaltab[0x80] = {};
 static unsigned char shiftedtab[0x80] = {};
 
+/* Key table bit layout:
+ *
+ *     1 T T n n n n n
+ *
+ * T = 00: function
+ * T = 01: more function
+ * T = 10: cursor
+ * T = 11: shifted cursor
+ */
+
 static void key(int keycode, unsigned char normal, unsigned char shifted)
 {
     normaltab[keycode] = normal;
     shiftedtab[keycode] = shifted;
+}
+
+static void ckey(int keycode, unsigned char key)
+{
+    normaltab[keycode] = 0x80 | 0x40 | key;
+    shiftedtab[keycode] = 0x80 | 0x60 | key;
+}
+
+static void fkey(int keycode, unsigned char key, unsigned char shifted)
+{
+    normaltab[keycode] = 0x80 | key;
+    shiftedtab[keycode] = 0x80 | shifted;
 }
 
 int main(int argc, const char* argv[])
@@ -71,34 +93,34 @@ int main(int argc, const char* argv[])
 	key(0x2f, '/', '?');
 
 	key(0x20, ' ', ' ');
-	key(0x7f, 127, 127);
+	key(0x7f, 8,   8);
 
-	key(0x10, 128, 138); /* function keys */
-	key(0x11, 129, 139);
-	key(0x12, 130, 140);
-	key(0x13, 131, 141);
-	key(0x14, 132, 142);
-	key(0x15, 133, 143);
-	key(0x16, 134, 144);
-	key(0x17, 135, 145);
-	key(0x18, 136, 146);
+	fkey(0x10, 11, 23); /* function keys */
+	fkey(0x11, 12, 24);
+	fkey(0x12, 13, 25);
+	fkey(0x13, 14, 26);
+	fkey(0x14, 15, 28);
+	fkey(0x15, 17, 29);
+	fkey(0x16, 18, 31);
+	fkey(0x17, 19, 32);
+	fkey(0x18, 20, 33);
 
-	key(0x0c, 0,   0); /* nav cluster */
-	key(0x0b, 0,   0);
-	key(0x07, 0,   0);
-	key(0x09, 0,   0);
-	key(0x0e, 0,   0);
-	key(0x0a, 0,   0);
+	fkey(0x0c, 2,  2|0x20); /* nav cluster */
+	fkey(0x0b, 7,  7|0x20);
+	fkey(0x07, 5,  5|0x20);
+	fkey(0x09, 3,  3|0x20);
+	fkey(0x0e, 8,  8|0x20);
+	fkey(0x0a, 6,  6|0x20);
 
-	key(0x1e, 11,  11); /* up */
-	key(0x1d, 8,   8); /* left */
-	key(0x1f, 10,  10); /* down */
-	key(0x1c, 12,  12); /* right */
+	ckey(0x1e, 0); /* up */
+	ckey(0x1d, 3); /* left */
+	ckey(0x1f, 1); /* down */
+	ckey(0x1c, 2); /* right */
 
 	key(0x03, 27,  27); /* left row */
-	key(0x04, 137, 147);
-	key(0x05, 148, 150);
-	key(0x06, 149, 151);
+	fkey(0x04, 21, 34);
+	fkey(0x05, 23, 23|0x20);
+	fkey(0x06, 24, 24|0x20);
 
     printf("keyboard_normal_map:\n");
     for (int i=0; i<sizeof(normaltab); i++)

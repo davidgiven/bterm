@@ -11,6 +11,7 @@ OBJS = \
 	$(OBJDIR)/src/interface.rel \
 	$(OBJDIR)/src/keyboard.rel \
 	$(OBJDIR)/src/vt102.rel \
+	$(OBJDIR)/src/print.rel \
 
 all: bterm.img
 
@@ -19,12 +20,12 @@ bterm.img: $(OBJDIR)/fs.cim
 
 $(OBJDIR)/%.cim: src/%.z80 Makefile
 	@mkdir -p $(dir $@)
-	zmac $(ZMAC_FLAGS) -o $@ $<
+	zmac $(ZMAC_FLAGS) -o $@ -o $(patsubst %.cim,%.lst,$@) $<
 
 $(OBJDIR)/bterm.img: $(OBJS) Makefile
 	@mkdir -p $(dir $@)
-	ld80 -m -O bin -o $@.all -P6000 $(OBJS)
-	tail -c+24577 $@.all > $@
+	ld80 -m -O bin -o $@.all -P7000 $(OBJS)
+	tail -c+28673 $@.all > $@
 
 $(OBJDIR)/%.rel: %.z80 Makefile src/constants.lib
 	@mkdir -p $(dir $@)

@@ -9,6 +9,7 @@
     extern KBDPULL
     extern KBDPUSH
     extern TTYINIT
+    extern TTYPH8
 
 	global ADDAHL
 	global ADDADE
