@@ -1,14 +1,14 @@
     global DPYCURS
+    global DPYCLRA
+    global DPYCLRL
     global DPYDELL
     global DPYINIT
     global DPYINSL
-    global DPYCLRL
     global DPYPRNA
     global DPYPRNU
     global DPYFLSH
 
-    extern ADDAHL
-    extern ADDADE
+    extern INTREAD
 
     maclib constants
     maclib z180
@@ -28,11 +28,13 @@ DPYINIT:
 
 ; C = char; DE = (y, x)
 DPYPRNA:
+    call dirty_row
+
     ; Convert ASCII value
     ld a, c
     sub 0x20
     ld hl, character_map_table
-    call ADDAHL             ; does not change de
+    adda16 h, l
     ld c, (hl)              ; screencode
 
     ; Write
@@ -46,7 +48,7 @@ calc_backbuffer_address:
     ld hl, back_buffer_address_table
     ld a, d
     add a
-    call ADDAHL             ; (address) -> hl
+    adda16 h, l             ; (address) -> hl
 
     ld a, (hl)
     inc hl
@@ -55,10 +57,20 @@ calc_backbuffer_address:
 
     ; Calculate address of cursor
     ld a, e
-    jp ADDAHL
+    adda16 h, l
+    ret
 
 ; HL = char; DE = (y, x)
 DPYPRNU:
+    call dirty_row
+    ret
+
+; On entry, D = y. On exit, HL is the dirty byte. Corrupts A.
+dirty_row:
+    ld hl, dirty_buffer
+    ld a, d
+    adda16 h, l
+    ld (hl), 1
     ret
 
 ; On entry: DE = (y, x)
@@ -67,7 +79,7 @@ DPYCURS:
     ld hl, video_memory_address_table
     ld a, d
     add a
-    call ADDAHL             ; [address] -> hl
+    adda16 h, l             ; [address] -> hl
 
     ld a, (hl)
     inc hl
@@ -76,7 +88,7 @@ DPYCURS:
 
     ; Calculate address of cursor
     ld a, e
-    call ADDAHL             ; address -> hl
+    adda16 h, l             ; address -> hl
 
     ld a, 15
     out0 (VIDEO_ADDR), a
@@ -90,11 +102,27 @@ DPYCURS:
 
     ret
 
+dirty_to_end_of_screen:
+    call dirty_row          ; dirty byte -> hl
+
+    ld a, SCREEN_HEIGHT
+    sub d                   ; number of lines to dirty
+
+    ld b, a
+    ld a, 1
+.1
+    ld (hl), a
+    inc hl
+    djnz .1
+    ret
+
 ; On entry: DE = (y, x)
 DPYDELL:
     ld a, SCREEN_HEIGHT-1
     cp d
     jr z, blank_last_line   ; on the last line?
+
+    call dirty_to_end_of_screen
 
     ld e, 0                 ; x = 0
     call calc_backbuffer_address ; line address -> hl
@@ -109,15 +137,18 @@ DPYDELL:
     ld h, d
     ld l, e
     ld a, SCREEN_WIDTH
-    call ADDAHL             ; line+1 -> hl, line -> de
-    ldir                    ; [hl] -> [de]
+    adda16 h, l             ; line+1 -> hl, line -> de
+    ldir                    ; [hl++] -> [de++]
 
 blank_last_line:
     ld hl, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH
     ld de, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + 1
     ld bc, SCREEN_WIDTH - 1
     ld (hl), ' '
-    ldir
+    ldir                    ; [hl++] -> [de++]
+
+    ld a, 1
+    ld (dirty_buffer + SCREEN_HEIGHT - 1), a
     ret
 
 ; On entry: DE = (y, x)
@@ -126,8 +157,11 @@ DPYINSL:
     cp d
     jr z, blank_last_line   ; on the last line?
 
+    call dirty_to_end_of_screen
+
     ld e, 0                 ; x = 0
     call calc_backbuffer_address ; line address -> hl
+    push hl
 
     ex de, hl               ; line address -> de
     ld hl, back_buffer_end - SCREEN_WIDTH
@@ -136,43 +170,156 @@ DPYINSL:
     ld b, h
     ld c, l                 ; amount to copy -> bc
 
-    ld hl, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
-    ld de, back_buffer + (SCREEN_HEIGHT-2)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
-    lddr                    ; [hl] -> [de]
+    ld hl, back_buffer + (SCREEN_HEIGHT-2)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
+    ld de, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
+    lddr                    ; [hl--] -> [de--]
 
-    jr blank_last_line
+    pop hl
+    jr clear_line_in_hl
 
 ; On entry: DE = (y, x)
 DPYCLRL:
+    call dirty_row
+
     ld e, 0                 ; x = 0
     call calc_backbuffer_address
 
+clear_line_in_hl:
     ld d, h
     ld e, l
     inc de
     ld (hl), ' '
     ld bc, SCREEN_WIDTH - 1
+    ldir                    ; [hl] -> [de]
+
+    ret
+
+; Clears rows d (inclusive) to e (exclusive).
+DPYCLRA:
+    ld a, d
+    cp e
+    ret z                   ; do nothing if nothing to do
+
+    ; Are we clearing the entire screen?
+
+    ld hl, SCREEN_HEIGHT    ; 0 -> h, SCREEN_HEIGHT -> l
+    ccf
+    sbc hl, de
+    jr z, DPYCLRS           ; use optimised routine
+
+    ; Set dirty bits.
+
+    ld a, d
+    ld hl, dirty_buffer
+    adda16 h, l             ; get dirty buffer address of first line
+
+    ld a, d                 ; first row -> a
+.1
+    ld (hl), 1
+    inc hl
+    inc a
+    cp e
+    jr nz, .1
+
+    ; Clear the actual screen area.
+
+    ld a, e
+    add a                   ; *2
+    ld hl, back_buffer_address_table
+    adda16 h, l
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a                 ; address of last exclusive row -> hl
+    ex de, hl               ; address of last exclusive row -> de, range -> hl
+
+    ld a, h
+    add a                   ; *2
+    ld hl, back_buffer_address_table
+    adda16 h, l
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a                 ; address of first row -> hl
+
+    ex de, hl               ; first -> de, last -> hl
+    ccf
+    sbc hl, de              ; hl -> number of bytes
+    dec hl                  ; hl -> number of bytes - 1
+    ld b, h
+    ld c, l                 ; bc -> number of bytes - 1
+
+    ld h, d
+    ld l, e                 ; first -> hl, de
+    inc de                  ; first+1 byte -> de
+    
+    ld (hl), ' '
+    ldir
+
+    ret
+
+; Clears the entire screen.
+DPYCLRS:
+    ; Set all dirty bits.
+
+    ld hl, dirty_buffer
+    ld de, dirty_buffer+1
+    ld bc, SCREEN_HEIGHT-1
+    ld (hl), 1
+    ldir
+
+    ; Clear the screen itself.
+
+    ld hl, back_buffer
+    ld de, back_buffer+1
+    ld bc, SCREEN_WIDTH*SCREEN_HEIGHT - 1
+    ld (hl), ' '
     ldir
 
     ret
 
 ; Flushes the backbuffer to the frontbuffer, if safe.
 DPYFLSH:
+    ld hl, old_blanking
+    ld c, (hl)              ; load old blanking state
+
     ld a, 31
     out0 (VIDEO_ADDR), a
     nop
     in0 a, (VIDEO_DATA)
     and 0x02
-    ret z
+    ld (hl), a              ; save blanking state
 
-    ld de, VIDEORAM_BASE + 0x1000
-    ld hl, back_buffer
+    ret z                   ; return if not in blanking period
+    ld a, c
+    or a
+    ret nz                  ; return if we _were_ in blanking period
 
-    rept SCREEN_HEIGHT
+    ld b, UPDATE_ROWS       ; number of rows left to update
+redraw macro ?skip
+        ld hl, dirty_buffer + line_no
+        ld a, (hl)
+        or a
+        jr z, ?skip
+
+        dec (hl)            ; reset dirty bit
+
+        exx
+        ld hl, back_buffer + line_no*SCREEN_WIDTH
+        ld de, VIDEORAM_BASE + line_no*SCREEN_STRIDE + 0x1000
         ld bc, SCREEN_WIDTH
         ldir
-        ld a, SCREEN_STRIDE - SCREEN_WIDTH
-        call ADDADE
+        exx
+
+        dec b               ; drawn a row
+        ret z
+    ?skip:
+    endm
+
+    line_no = 0
+    rept SCREEN_HEIGHT
+        redraw
+        line_no = line_no + 1
     endm
     ret
 
@@ -194,7 +341,7 @@ character_map_table:
 
 back_buffer_address_table:
     line_no = 0
-    rept SCREEN_HEIGHT
+    rept SCREEN_HEIGHT + 1
         dw back_buffer + line_no*SCREEN_WIDTH
         line_no = line_no + 1
     endm
@@ -209,6 +356,8 @@ video_memory_address_table:
     dseg
 back_buffer: ds SCREEN_WIDTH * SCREEN_HEIGHT
 back_buffer_end:
+dirty_buffer: ds SCREEN_HEIGHT
+old_blanking: db 0
 
 ; vim: ts=4 sw=4 et ft=asm
 
