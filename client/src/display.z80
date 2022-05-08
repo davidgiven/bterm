@@ -16,14 +16,19 @@
 	cseg
 
 DPYINIT:
-    ld a, 10
-    out0 (VIDEO_ADDR), a
-    ld a, 0x60
-    out0 (VIDEO_DATA), a
-    ld a, 11
-    out0 (VIDEO_ADDR), a
-    ld a, 0xff
-    out0 (VIDEO_DATA), a
+    ld de, 0x0a60       ; cursor 1 start
+    call set_6544_reg
+    ld de, 0x0bff       ; cursor 1 end
+    call set_6544_reg
+    ld de, 0x2100       ; no padding between video memory rows
+    call set_6544_reg
+    ld de, 0x200e
+    ret
+
+set_6544_reg:
+    out0 (VIDEO_ADDR), d
+    nop
+    out0 (VIDEO_DATA), e
     ret
 
 ; C = char; DE = (y, x)
@@ -295,6 +300,16 @@ DPYFLSH:
     or a
     ret nz                  ; return if we _were_ in blanking period
 
+    ld a, 0x02              ; physical address = 0x020000 + back_buffer
+    out0 (SAR0B), a
+    ld a, 0x01              ; physical address = 0x011000
+    out0 (DAR0B), a
+
+    ld a, 0x02
+    out0 (DMODE), a
+    ld a, 0x40
+    out0 (DCNTL), a
+
     ld b, UPDATE_ROWS       ; number of rows left to update
 redraw macro ?skip
         ld hl, dirty_buffer + line_no
@@ -304,12 +319,20 @@ redraw macro ?skip
 
         dec (hl)            ; reset dirty bit
 
-        exx
-        ld hl, back_buffer + line_no*SCREEN_WIDTH
-        ld de, VIDEORAM_BASE + line_no*SCREEN_STRIDE + 0x1000
-        ld bc, SCREEN_WIDTH
-        ldir
-        exx
+        ld de, back_buffer + line_no*SCREEN_WIDTH
+        out0 (SAR0H), d
+        out0 (SAR0L), e
+
+        ld de, line_no*SCREEN_STRIDE + 0x1000
+        out0 (DAR0H), d
+        out0 (DAR0L), e
+
+        ld de, SCREEN_WIDTH
+        out0 (BCR0H), d
+        out0 (BCR0L), e
+
+        ld a, 0x40
+        out0 (DSTAT), a
 
         dec b               ; drawn a row
         ret z
@@ -321,6 +344,7 @@ redraw macro ?skip
         redraw
         line_no = line_no + 1
     endm
+
     ret
 
 ; Maps from ASCII (minus $20) to the Brother character set.
