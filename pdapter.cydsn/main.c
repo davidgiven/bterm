@@ -1,4 +1,6 @@
 #include "project.h"
+#include <stdint.h>
+#include <stdbool.h>
 
 enum
 {
@@ -85,6 +87,7 @@ int main(void)
             }
         }
         
+        unsigned bs = UART_SpiUartGetTxBufferSize();
         switch (write_state)
         {
             case WS_WRITABLE:
@@ -96,7 +99,7 @@ int main(void)
                 break;
             
             case WS_WRITING:
-                if (UART_SpiUartGetTxBufferSize() == 0)
+                if (bs < UART_UART_TX_BUFFER_SIZE)
                 {
                     uint8_t b = STATUS_REG0_Read();
                     UART_UartPutChar(b);
@@ -114,6 +117,7 @@ int main(void)
                 break;
         }
         
-        CONTROL_REG1_Write(read_state | (write_state<<2));
+        bool cts = bs > (UART_UART_TX_BUFFER_SIZE / 2);
+        CONTROL_REG1_Write(read_state | (write_state<<2) | (cts<<7));
     }
 }

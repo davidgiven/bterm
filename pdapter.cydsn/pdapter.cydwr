@@ -38,6 +38,7 @@
       <Data key="ad18f62f-1db0-48c3-8c85-fbb621ff7f28" value="IOE_PIN" />
       <Data key="bb03222c-3259-455f-9809-69c1fed9f348" value="RD_PIN" />
       <Data key="ddf5a1e0-b9dc-4e10-a357-d7819db73cd5" value="DATA_PINS" />
+      <Data key="df634b25-1b8b-4063-b066-2e9e36042cc7" value="CTS" />
       <Data key="e851a3b9-efb8-48be-bbb8-b303b216c393" value="HSYNCOUT_PIN" />
       <Data key="ed092b9b-d398-4703-be89-cebf998501f6" value="Tx_1" />
     </Group>
@@ -1681,6 +1682,11 @@
       </Group>
       <Group key="7">
         <Data key="Port Format" value="2,7" />
+      </Group>
+    </Group>
+    <Group key="df634b25-1b8b-4063-b066-2e9e36042cc7">
+      <Group key="0">
+        <Data key="Port Format" value="1,4" />
       </Group>
     </Group>
     <Group key="e851a3b9-efb8-48be-bbb8-b303b216c393">
