@@ -23,7 +23,7 @@
 ; We want access to the video memory, so we change the mapping to:
 ;
 ;    CBAR  CBR  BBR  bank           common
-;     e7    02   27  7000 @ 27000   e000 @ 10000
+;     e7    02   20  7000 @ 27000   e000 @ 10000
 ;
 ;     0000-6fff -> 00000-06fff (base)
 ;     7000-dfff -> 27000-2dfff (bank)
@@ -33,7 +33,7 @@
 ; f800 logical, so we also use this mapping:
 ;
 ;    CBAR  CBR  BBR  bank           common
-;     e7    16   27  7000 @ 27000   e000 @ 24000
+;     e7    16   20  7000 @ 27000   e000 @ 24000
 ;
 ;     0000-6fff -> 00000-06fff (base)
 ;     7000-dfff -> 27000-2dfff (bank)
@@ -71,7 +71,7 @@ entry:
     out0 (CBAR), c
     ld c, $16
     out0 (CBR), c
-    ld c, $27
+    ld c, $20
     out0 (BBR), c
 
     ; Clear the screen.
