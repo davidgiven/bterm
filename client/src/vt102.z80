@@ -1,4 +1,4 @@
-    extern ADDAHL
+    extern DPYCLRA
     extern DPYCLRL
     extern DPYCURS
     extern DPYDELL
@@ -26,7 +26,7 @@ state_$name:
 
 TTYINIT:
     ld hl, 0
-    ld (tty_cursorx), hl
+    ld (cursorx), hl
     ld hl, state_waiting
     ld (current_state), hl
     call do_ed_all
@@ -50,40 +50,40 @@ defstate waiting
 print_ascii:
     call set_state_waiting
     ld a, c
-    sub 8
+    cp 8
     jp z, do_backspace
-    dec a               ; compare with 9
+    cp 9
     jp z, do_tab
-    dec a               ; compare with 10
-    jp z, tty_linefeed
-    dec a               ; compare with 11
-    jp z, tty_linefeed
-    dec a               ; compare with 12
-    jp z, tty_linefeed
-    dec a               ; compare with 13
-    jp z, tty_carriagereturn
-    sub 27 - 13         ; compare with 27
+    cp 10
+    jp z, do_linefeed
+    cp 11
+    jp z, do_linefeed
+    cp 12
+    jp z, do_linefeed
+    cp 13
+    jp z, do_carriagereturn
+    cp 27
     jp z, set_state_escape
-    sub 32 - 27         ; compare with 32
+    cp 32
     ret c
 
 print_printable:
-    ld de, (tty_cursorx)
+    ld de, (cursorx)
     call DPYPRNA
     ; fall through
 advance_cursor:
-    ld hl, tty_cursorx
+    ld hl, cursorx
     inc (hl)
     ld a, SCREEN_WIDTH
     cp (hl)
     jp nz, update_cursor
 
     ld (hl), 0          ; reset X to zero
-    jp tty_linefeed
+    jp do_linefeed
 
 print_utf8:
     ld hl, (utf8_char)
-    ld de, (tty_cursorx)
+    ld de, (cursorx)
     call DPYPRNU
     jr advance_cursor
 
@@ -116,11 +116,11 @@ defstate escape
     call set_state_waiting
     ld a, c
     cp 'D'
-    jp z, tty_linefeed
+    jp z, do_linefeed
     cp 'E'
-    jp z, tty_newline
+    jp z, do_newline
     cp 'M'
-    jp z, tty_reverse_linefeed
+    jp z, do_reverse_linefeed
     cp 'Z'
     jp z, do_csi_da
     cp '7'
@@ -156,28 +156,28 @@ defstate csi
 
     cp '?'          ; 'private' flag
     jp nz, .1
-    ld hl, tty_commandflags
+    ld hl, commandflags
     set COMMANDFLAG_PRIVATE_BIT, (hl)
     ret
 .1
     cp ';'          ; advance to next parameter
     jp nz, .2
-    ld a, (tty_currentparam)
+    ld a, (currentparam)
     cp NPARS - 1
     ret z
     inc a
-    ld (tty_currentparam), a
+    ld (currentparam), a
     ret
 .2
     cp '0'
     jp c, set_state_waiting     ; invalid char, give up
     cp '9'+1
-    jp nc, .3
+    jp nc, .3                   ; not a digit, must have command byte
     ; Parse decimal parameter: first calculate the parameter address
-    ld a, (tty_currentparam)
+    ld a, (currentparam)
     add a
-    ld hl, tty_parameters
-    call ADDAHL
+    ld hl, parameters
+    adda16 h, l
     ; Load parameter
     ld e, (hl)
     inc hl
@@ -195,7 +195,7 @@ defstate csi
     ; Add digit
     ld a, c
     sub '0'
-    call ADDAHL
+    adda16 h, l
     ; Store parameter
     ex de, hl                   ; address+1 -> hl, parameter -> de
     ld (hl), d
@@ -205,7 +205,7 @@ defstate csi
 .3
     ; If we got here, we're a command byte
     call set_state_waiting
-    ld hl, tty_commandflags
+    ld hl, commandflags
     bit COMMANDFLAG_PRIVATE_BIT, (hl)
     jp nz, csi_private
 
@@ -213,8 +213,6 @@ defstate csi
     
 csi_non_private:
     ld a, c
-    cp '@'
-    jp z, do_csi_ich
     cp 'A'
     jp z, do_csi_cuu
     cp 'B'
@@ -226,13 +224,13 @@ csi_non_private:
     cp 'E'              ; CNL, move down and go to column one
     jp nz, .1
     xor a
-    ld (tty_cursorx), a
+    ld (cursorx), a
     jp do_csi_cud
 .1
     cp 'F'              ; CPL, move dup and go to column one
     jp nz, .2
     xor a
-    ld (tty_cursorx), a
+    ld (cursorx), a
     jp do_csi_cuu
 .2
     cp 'G'
@@ -241,7 +239,7 @@ csi_non_private:
     jp z, do_csi_cup
     cp 'J'              ; ED, erase display
     jp nz, .3
-    ld a, (tty_parameters+0)
+    ld a, (parameters+0)
     or a
     jp z, do_ed_cursor_to_end
     dec a
@@ -250,7 +248,7 @@ csi_non_private:
 .3
     cp 'K'              ; EL, erase line
     jp nz, .4
-    ld a, (tty_parameters+0)
+    ld a, (parameters+0)
     or a
     jp z, do_csi_el_cursor_to_end
     dec a
@@ -272,22 +270,10 @@ csi_private:
     ; Private command set here
     ret
 
-; Inserts (tty_parameters+0) blank characters.
-do_csi_ich:
-    ld hl, tty_parameters+0
-    ld b, (hl)
-.1
-    push bc
-    ld c, ' '
-    call print_printable
-    pop bc
-    djnz .1
-    ret
-
-; Moves cursor up by (tty_parameters+0) rows (no scrolling).
+; Moves cursor up by (parameters+0) rows (no scrolling).
 do_csi_cuu:
-    ld hl, tty_cursory
-    ld a, (tty_parameters+0)
+    ld hl, cursory
+    ld a, (parameters+0)
     or a
     jp nz, .2
     inc a
@@ -297,13 +283,13 @@ do_csi_cuu:
     jp c, .1
     xor a
 .1
-    ld (tty_cursory), a
+    ld (cursory), a
     jp update_cursor
 
-; Moves cursor down by (tty_parameters+0) rows (no scrolling).
+; Moves cursor down by (parameters+0) rows (no scrolling).
 do_csi_cud:
-    ld hl, tty_cursory
-    ld a, (tty_parameters+0)
+    ld hl, cursory
+    ld a, (parameters+0)
     or a
     jp nz, .2
     inc a
@@ -313,13 +299,13 @@ do_csi_cud:
     jp c, .1
     ld a, SCREEN_HEIGHT-1
 .1
-    ld (tty_cursory), a
+    ld (cursory), a
     jp update_cursor
 
-; Moves cursor left by (tty_parameters+0) rows (no wrap).
+; Moves cursor left by (parameters+0) rows (no wrap).
 do_csi_cub:
-    ld hl, tty_cursorx
-    ld a, (tty_parameters+0)
+    ld hl, cursorx
+    ld a, (parameters+0)
     or a
     jp nz, .2
     inc a
@@ -329,13 +315,13 @@ do_csi_cub:
     jp c, .1
     xor a
 .1
-    ld (tty_cursorx), a
+    ld (cursorx), a
     jp update_cursor
 
-; Moves cursor right by (tty_parameters+0) rows (no wrap).
+; Moves cursor right by (parameters+0) rows (no wrap).
 do_csi_cuf:
-    ld hl, tty_cursorx
-    ld a, (tty_parameters+0)
+    ld hl, cursorx
+    ld a, (parameters+0)
     or a
     jp nz, .2
     inc a
@@ -345,41 +331,56 @@ do_csi_cuf:
     jp c, .1
     ld a, SCREEN_WIDTH-1
 .1
-    ld (tty_cursorx), a
+    ld (cursorx), a
     jp update_cursor
 
 ; Move to indicated column in current row.
 do_csi_cha:
-    ld a, (tty_parameters+0)
-    jp tty_setx
+    ld a, (parameters+0)
+    jp setx
 
 ; Move to a particular location.
 do_csi_cup:
-    ld a, (tty_parameters+0)
-    call tty_sety
-    ld a, (tty_parameters+2)
-    jp tty_setx
+    ld a, (parameters+0)
+    call sety
+    ld a, (parameters+2)
+    jp setx
     
 ; Erase from start to cursor.
 do_ed_start_to_cursor:
-    ld a, (tty_cursory)
+    ld a, (cursory)
     ld e, a
-    call erase_lines_d_to_e
+    if EMULATE_DPYCLRA
+        call erase_lines_d_to_e
+    else
+        call DPYCLRA
+    endif
     jp do_csi_el_start_to_cursor
 
 ; Erase from cursor to end.
 do_ed_cursor_to_end:
-    ld a, (tty_cursory)
+    ld a, (cursory)
     inc a
     ld d, a
     ld e, SCREEN_HEIGHT
-    call erase_lines_d_to_e
+    if EMULATE_DPYCLRA
+        call erase_lines_d_to_e
+    else
+        call DPYCLRA
+    endif
     jp do_csi_el_cursor_to_end
 
 ; Erase all.
 do_ed_all:
     ld de, SCREEN_HEIGHT    ; 0 -> d, SCREEN_HEIGHT -> e
-    ; fall through
+    if EMULATE_DPYCLRA
+        jr erase_lines_d_to_e
+    else
+        jp DPYCLRA
+    endif
+
+    if EMULATE_DPYCLRA
+
 ; Erase lines d to e-1.
 erase_lines_d_to_e:
     ld a, d
@@ -397,55 +398,50 @@ erase_lines_d_to_e:
     jp nz, .1
     ret
     
+    endif
+
 ; Erase from start of line to cursor.
 do_csi_el_start_to_cursor:
-    ld hl, (tty_cursorx)
-    push hl
-
-    ld b, l
+    ld de, (cursorx)
     xor a
-    ld (tty_cursorx), a
-
-    ld c, ' '
 .1
-    push bc
-    call print_printable
-    pop bc
-    djnz .1
+    cp e
+    ret z
 
-    pop hl
-    ld (tty_cursorx), hl
-    ret
+    push af
+    push de
+    call DPYPRNA
+    pop de
+    pop af
+
+    inc a
+    jr .1
 
 do_csi_el_cursor_to_end:
-    ld hl, (tty_cursorx)
-    push hl
-
-    xor a
-    ld (tty_cursorx), a
-
-    ld a, SCREEN_WIDTH
-    sub l
-    ld b, a
-    ld c, ' '
+    ld de, (cursorx)
 .1
-    push bc
-    call print_printable
-    pop bc
-    djnz .1
+    ld a, SCREEN_WIDTH
+    cp e
+    ret z
 
-    pop hl
-    ld (tty_cursorx), hl
-    ret
+    push af
+    push de
+    ld c, ' '
+    call DPYPRNA
+    pop de
+    pop af
+
+    inc e
+    jr .1
 
 ; Erase current line.
 do_csi_el_all:
-    ld de, (tty_cursorx)
+    ld de, (cursorx)
     jp DPYCLRL
 
 ; Insert lines.
 do_csi_il:
-    ld a, (tty_parameters+0)
+    ld a, (parameters+0)
     or a
     jr nz, .1
     inc a
@@ -453,7 +449,7 @@ do_csi_il:
     ld b, a
 .2
     push bc
-    ld a, (tty_cursory)
+    ld a, (cursory)
     ld d, a
     call DPYINSL
     pop bc
@@ -462,7 +458,7 @@ do_csi_il:
 
 ; Delete lines.
 do_csi_dl:
-    ld a, (tty_parameters+0)
+    ld a, (parameters+0)
     or a
     jr nz, .1
     inc a
@@ -470,8 +466,7 @@ do_csi_dl:
     ld b, a
 .2
     push bc
-    ld a, (tty_cursory)
-    ld d, a
+    ld de, (cursorx)
     call DPYDELL
     pop bc
     djnz .2
@@ -486,14 +481,14 @@ do_csi_da:
 
 ; Save cursor and attributes.
 do_decsc:
-    ld hl, (tty_cursorx)
+    ld hl, (cursorx)
     ld (saved_cursorx), hl
     ret
 
 ; Restore cursor and attributes
 do_decrc:
     ld hl, (saved_cursorx)
-    ld (tty_cursorx), hl
+    ld (cursorx), hl
     jp update_cursor
 
     dseg
@@ -503,7 +498,7 @@ saved_cursory: db 0
 
 ; Device status report --- what is reported varies by parameter.
 do_csi_dsr:
-    ld a, (tty_parameters+0)
+    ld a, (parameters+0)
     cp 5                ; Terminal status?
     jp z, do_csi_dsr_terminal_status
     cp 6                ; Report cursor position?
@@ -521,12 +516,12 @@ do_csi_dsr_report_cursor_position:
     call KBDTYPE
     ld a, '['
     call KBDTYPE
-    ld a, (tty_cursory)
+    ld a, (cursory)
     inc a
     call TTYTYPD
     ld a, ';'
     call KBDTYPE
-    ld a, (tty_cursorx)
+    ld a, (cursorx)
     inc a
     call TTYTYPD
     ld a, 'R'
@@ -535,54 +530,58 @@ do_csi_dsr_report_cursor_position:
 ; --- Simple motion ---------------------------------------------------------
 
 update_cursor:
-    ld de, (tty_cursorx)
+    ld de, (cursorx)
     jp DPYCURS
 
 do_backspace:
-    ld a, (tty_cursorx)
+    ld a, (cursorx)
     or a
     ret z
 
     dec a
-    ld (tty_cursorx), a
+    ld (cursorx), a
     jp update_cursor
 
 do_tab:
-    ld a, (tty_cursorx)
-    and ~7
-    add 8
-    cp SCREEN_WIDTH - 1
-    ret nc
+    ld de, (cursorx)
+    ld a, SCREEN_WIDTH-1
+    cp d
+    ret z
 
-    ld (tty_cursorx), a
-    jp update_cursor
+    ld a, ~7
+    and d
+    ret z
 
-tty_linefeed:
-    ld a, (tty_cursory)
+    ld c, ' '
+    call print_printable
+    jr do_tab
+
+do_linefeed:
+    ld a, (cursory)
     cp SCREEN_HEIGHT - 1
     jp z, scroll_up
     inc a
-    ld (tty_cursory), a
+    ld (cursory), a
     jp update_cursor
 
-tty_reverse_linefeed:
-    ld a, (tty_cursory)
+do_reverse_linefeed:
+    ld a, (cursory)
     or a
     jp z, scroll_down
     dec a
-    ld (tty_cursory), a
+    ld (cursory), a
     jp update_cursor
 
-tty_newline:
-    call tty_linefeed
+do_newline:
+    call do_linefeed
     ; fall through
-tty_carriagereturn:
+do_carriagereturn:
     xor a
-    ld (tty_cursorx), a
+    ld (cursorx), a
     jp update_cursor
 
 ; Set X coordinate to A (1 being the left column)
-tty_setx:
+setx:
     or a
     jp z, .1                ; zero means home
     dec a                   ; convert to our numbering scheme
@@ -591,11 +590,11 @@ tty_setx:
     jp c, .2
     ld a, SCREEN_WIDTH-1
 .2
-    ld (tty_cursorx), a
+    ld (cursorx), a
     jp update_cursor
 
 ; Set Y coordinate to A (1 being the left column)
-tty_sety:
+sety:
     or a
     jp z, .1                ; zero means home
     dec a                   ; convert to our numbering scheme
@@ -604,7 +603,7 @@ tty_sety:
     jp c, .2
     ld a, SCREEN_HEIGHT-1
 .2
-    ld (tty_cursory), a
+    ld (cursory), a
     jp update_cursor
 
 ; --- UTF-8 handling --------------------------------------------------------
@@ -674,8 +673,8 @@ scroll_up:
     jp DPYDELL
 
 scroll_down:
-    ld d, SCREEN_HEIGHT-1
-    jp DPYDELL
+    ld d, 0
+    jp DPYINSL
 
 ; --- Reporting -------------------------------------------------------------
 
@@ -738,13 +737,13 @@ current_state: 		dw 0
 pending_utf8_bytes: db 0
 utf8_char:			dw 0
 
-tty_cursorx:        db 0
-tty_cursory:        db 0
+cursorx:            db 0
+cursory:            db 0
 
-start_csi_state:
-tty_commandflags:   db 0
-tty_currentparam:   db 0
-tty_parameters:     ds 16*2
+start_csi_state:    
+commandflags:       db 0
+currentparam:       db 0
+parameters:         ds 16*2
 end_csi_state:
 
 COMMANDFLAG_PRIVATE_BIT: equ 0

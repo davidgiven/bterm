@@ -3,9 +3,9 @@
     global KBDPUSH
     global KBDTYPE
 
-    extern ADDAHL
     extern TTYTYPD
 
+    maclib constants
     maclib z180
 
 MODIFIER_BIT_SHIFT = 0
@@ -97,7 +97,7 @@ KBDTYPE:
 
     ld hl, keyboard_buffer
     ld a, d
-    call ADDAHL
+    adda16 h, l
     ld (hl), c              ; write key
 
     inc d
@@ -117,7 +117,7 @@ KBDPULL:
 
     ld hl, keyboard_buffer
     ld a, e
-    call ADDAHL
+    adda16 h, l
     ld c, (hl)              ; read key
 
     inc e

@@ -2,6 +2,7 @@
     extern DPYFLSH
     extern DPYINIT
     extern INTINIT
+    extern INTPULL
     extern INTREAD
     extern INTSTAT
     extern INTWRIT
@@ -10,9 +11,6 @@
     extern KBDPUSH
     extern TTYINIT
     extern TTYPH8
-
-	global ADDAHL
-	global ADDADE
 
 	cseg
 entry:
@@ -25,7 +23,7 @@ loop:
     call DPYFLSH
 
 	call INTREAD        ; byte -> c
-    call TTYPUTC        ; print c
+    call TTYPUTC        ; if present, print it
 
     call KBDPUSH        ; keyboard -> ring buffer
 
@@ -37,20 +35,6 @@ loop:
 
 	jr loop
 	ret
-
-ADDAHL:
-    add a, l
-    ld l, a
-    ret nc
-    inc h
-    ret
-
-ADDADE:
-    add a, e
-    ld e, a
-    ret nc
-    inc d
-    ret
 
 ; vim: ts=4 sw=4 et ft=asm
 
