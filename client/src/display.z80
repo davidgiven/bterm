@@ -33,8 +33,6 @@ set_6544_reg:
 
 ; C = char; DE = (y, x)
 DPYPRNA:
-    call dirty_row
-
     ; Convert ASCII value
     ld a, c
     sub 0x20
@@ -67,16 +65,8 @@ calc_backbuffer_address:
 
 ; HL = char; DE = (y, x)
 DPYPRNU:
-    call dirty_row
-    ret
-
-; On entry, D = y. On exit, HL is the dirty byte. Corrupts A.
-dirty_row:
-    ld hl, dirty_buffer
-    ld a, d
-    adda16 h, l
-    ld (hl), 1
-    ret
+    ld c, 'X'
+    jr DPYPRNA
 
 ; On entry: DE = (y, x)
 DPYCURS:
@@ -107,27 +97,11 @@ DPYCURS:
 
     ret
 
-dirty_to_end_of_screen:
-    call dirty_row          ; dirty byte -> hl
-
-    ld a, SCREEN_HEIGHT
-    sub d                   ; number of lines to dirty
-
-    ld b, a
-    ld a, 1
-.1
-    ld (hl), a
-    inc hl
-    djnz .1
-    ret
-
 ; On entry: DE = (y, x)
 DPYDELL:
     ld a, SCREEN_HEIGHT-1
     cp d
     jr z, blank_last_line   ; on the last line?
-
-    call dirty_to_end_of_screen
 
     ld e, 0                 ; x = 0
     call calc_backbuffer_address ; line address -> hl
@@ -151,9 +125,6 @@ blank_last_line:
     ld bc, SCREEN_WIDTH - 1
     ld (hl), ' '
     ldir                    ; [hl++] -> [de++]
-
-    ld a, 1
-    ld (dirty_buffer + SCREEN_HEIGHT - 1), a
     ret
 
 ; On entry: DE = (y, x)
@@ -161,8 +132,6 @@ DPYINSL:
     ld a, SCREEN_HEIGHT-1
     cp d
     jr z, blank_last_line   ; on the last line?
-
-    call dirty_to_end_of_screen
 
     ld e, 0                 ; x = 0
     call calc_backbuffer_address ; line address -> hl
@@ -184,8 +153,6 @@ DPYINSL:
 
 ; On entry: DE = (y, x)
 DPYCLRL:
-    call dirty_row
-
     ld e, 0                 ; x = 0
     call calc_backbuffer_address
 
@@ -211,20 +178,6 @@ DPYCLRA:
     ccf
     sbc hl, de
     jr z, DPYCLRS           ; use optimised routine
-
-    ; Set dirty bits.
-
-    ld a, d
-    ld hl, dirty_buffer
-    adda16 h, l             ; get dirty buffer address of first line
-
-    ld a, d                 ; first row -> a
-.1
-    ld (hl), 1
-    inc hl
-    inc a
-    cp e
-    jr nz, .1
 
     ; Clear the actual screen area.
 
@@ -265,14 +218,6 @@ DPYCLRA:
 
 ; Clears the entire screen.
 DPYCLRS:
-    ; Set all dirty bits.
-
-    ld hl, dirty_buffer
-    ld de, dirty_buffer+1
-    ld bc, SCREEN_HEIGHT-1
-    ld (hl), 1
-    ldir
-
     ; Clear the screen itself.
 
     ld hl, back_buffer
@@ -300,6 +245,28 @@ DPYFLSH:
     or a
     ret nz                  ; return if we _were_ in blanking period
 
+    ; Advance the block counter.
+
+    ld hl, displayed_bank
+    ld a, (hl)
+    inc a
+    cp 3
+    jr nz, .1
+    xor a
+.1
+    ld (hl), a
+    
+    ; Get the offset of the block to update.
+
+    add a
+    ld hl, page_array
+    adda16 h, l
+    ld c, (hl)
+    inc hl
+    ld b, (hl)
+
+    ; Set up for DMA.
+
     ld a, 0x02              ; physical address = 0x020000 + back_buffer
     out0 (SAR0B), a
     ld a, 0x01              ; physical address = 0x011000
@@ -310,42 +277,32 @@ DPYFLSH:
     ld a, 0x40
     out0 (DCNTL), a
 
-    ld b, UPDATE_ROWS       ; number of rows left to update
-redraw macro ?skip
-        ld hl, dirty_buffer + line_no
-        ld a, (hl)
-        or a
-        jr z, ?skip
+    ; Actually do the update.
 
-        dec (hl)            ; reset dirty bit
+    ld hl, back_buffer
+    add hl, bc
+    out0 (SAR0H), h
+    out0 (SAR0L), l
 
-        ld de, back_buffer + line_no*SCREEN_WIDTH
-        out0 (SAR0H), d
-        out0 (SAR0L), e
+    ld hl, 0x1000
+    add hl, bc
+    out0 (DAR0H), h
+    out0 (DAR0L), l
 
-        ld de, line_no*SCREEN_STRIDE + 0x1000
-        out0 (DAR0H), d
-        out0 (DAR0L), e
+    ld hl, SCREEN_WIDTH*5
+    out0 (BCR0H), h
+    out0 (BCR0L), l
 
-        ld de, SCREEN_WIDTH
-        out0 (BCR0H), d
-        out0 (BCR0L), e
-
-        ld a, 0x40
-        out0 (DSTAT), a
-
-        dec b               ; drawn a row
-        ret z
-    ?skip:
-    endm
-
-    line_no = 0
-    rept SCREEN_HEIGHT
-        redraw
-        line_no = line_no + 1
-    endm
-
+    ld a, 0x40
+    out0 (DSTAT), a
     ret
+
+; Page array: points at the five-line blocks we update each frame.
+
+page_array:
+    dw SCREEN_STRIDE*0
+    dw SCREEN_STRIDE*5
+    dw SCREEN_STRIDE*10
 
 ; Maps from ASCII (minus $20) to the Brother character set.
 
@@ -380,8 +337,8 @@ video_memory_address_table:
     dseg
 back_buffer: ds SCREEN_WIDTH * SCREEN_HEIGHT
 back_buffer_end:
-dirty_buffer: ds SCREEN_HEIGHT
 old_blanking: db 0
+displayed_bank: db 0
 
 ; vim: ts=4 sw=4 et ft=asm
 
