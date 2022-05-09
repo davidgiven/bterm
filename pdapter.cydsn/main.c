@@ -52,11 +52,12 @@ int main(void)
             write_state = WS_WRITABLE;
         }
         
+        unsigned readBufferSize = UART_SpiUartGetRxBufferSize();
         switch (read_state)
         {
             case RS_IDLE:
             {
-                if (UART_SpiUartGetRxBufferSize() > 0)
+                if (readBufferSize > 0)
                 {
                     uint32_t b = UART_UartGetByte();
                     CONTROL_REG0_Write(b & 0xff);
@@ -87,7 +88,6 @@ int main(void)
             }
         }
         
-        unsigned bs = UART_SpiUartGetTxBufferSize();
         switch (write_state)
         {
             case WS_WRITABLE:
@@ -99,7 +99,7 @@ int main(void)
                 break;
             
             case WS_WRITING:
-                if (bs < UART_UART_TX_BUFFER_SIZE)
+                if (UART_SpiUartGetTxBufferSize() < UART_TX_BUFFER_SIZE)
                 {
                     uint8_t b = STATUS_REG0_Read();
                     UART_UartPutChar(b);
@@ -117,7 +117,7 @@ int main(void)
                 break;
         }
         
-        bool cts = bs > (UART_UART_TX_BUFFER_SIZE / 2);
+        bool cts = readBufferSize < (UART_RX_BUFFER_SIZE / 2);
         CONTROL_REG1_Write(read_state | (write_state<<2) | (cts<<7));
     }
 }
