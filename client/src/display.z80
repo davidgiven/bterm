@@ -8,6 +8,8 @@
     global DPYPRNU
     global DPYFLSH
 
+    extern DMALDIR
+    extern DMALDDR
     extern INTREAD
 
     maclib constants
@@ -31,7 +33,7 @@ set_6544_reg:
     out0 (VIDEO_DATA), e
     ret
 
-; C = char; DE = (y, x)
+; B = attributes; C = char; DE = (y, x)
 DPYPRNA:
     ; Convert ASCII value
     ld a, c
@@ -43,6 +45,10 @@ DPYPRNA:
     ; Write
     call calc_backbuffer_address
     ld (hl), c
+
+    set 3, h                ; convert address to attribute space
+    ld (hl), b
+
     ret
 
 ; Given a cursor location in de, calculates the address in hl.
@@ -63,7 +69,7 @@ calc_backbuffer_address:
     adda16 h, l
     ret
 
-; HL = char; DE = (y, x)
+; B = attributes; HL = char; DE = (y, x)
 DPYPRNU:
     ld c, 'X'
     jr DPYPRNA
@@ -117,15 +123,25 @@ DPYDELL:
     ld l, e
     ld a, SCREEN_WIDTH
     adda16 h, l             ; line+1 -> hl, line -> de
-    ldir                    ; [hl++] -> [de++]
+    call DMALDIR            ; [hl++] -> [de++]
+
+    set 3, d                ; convert addresses to attribute
+    set 3, h
+    call DMALDIR            ; [hl++] -> [de++]
 
 blank_last_line:
     ld hl, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH
     ld de, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + 1
     ld bc, SCREEN_WIDTH - 1
+
     ld (hl), ' '
-    ldir                    ; [hl++] -> [de++]
-    ret
+    call DMALDIR            ; [hl++] -> [de++]
+
+    set 3, d                ; convert addresses to attribute
+    set 3, h
+
+    ld (hl), 0
+    jr DMALDIR              ; [hl++] -> [de++]
 
 ; On entry: DE = (y, x)
 DPYINSL:
@@ -146,7 +162,11 @@ DPYINSL:
 
     ld hl, back_buffer + (SCREEN_HEIGHT-2)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
     ld de, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
-    lddr                    ; [hl--] -> [de--]
+    call DMALDDR            ; [hl--] -> [de--]
+
+    set 3, d                ; convert addresses to attribute
+    set 3, h
+    call DMALDDR            ; [hl++] -> [de++]
 
     pop hl
     jr clear_line_in_hl
@@ -162,9 +182,12 @@ clear_line_in_hl:
     inc de
     ld (hl), ' '
     ld bc, SCREEN_WIDTH - 1
-    ldir                    ; [hl] -> [de]
+    call DMALDIR            ; [hl] -> [de]
 
-    ret
+    set 3, h                ; convert addresses to attribute space
+    set 3, d
+    ld (hl), 0
+    jr DMALDIR              ; [hl] -> [de]
 
 ; Clears rows d (inclusive) to e (exclusive).
 DPYCLRA:
@@ -212,7 +235,12 @@ DPYCLRA:
     inc de                  ; first+1 byte -> de
     
     ld (hl), ' '
-    ldir
+    call DMALDIR
+
+    set 3, h                ; convert addresses to attribute space
+    set 3, d
+    ld (hl), 0
+    jr DMALDIR              ; [hl] -> [de]
 
     ret
 
@@ -224,9 +252,12 @@ DPYCLRS:
     ld de, back_buffer+1
     ld bc, SCREEN_WIDTH*SCREEN_HEIGHT - 1
     ld (hl), ' '
-    ldir
+    call DMALDIR
 
-    ret
+    set 3, h                ; convert addresses to attribute space
+    set 3, d
+    ld (hl), 0
+    jr DMALDIR              ; [hl] -> [de]
 
 ; Flushes the backbuffer to the frontbuffer, if safe.
 DPYFLSH:
@@ -269,7 +300,7 @@ DPYFLSH:
 
     ld a, 0x02              ; physical address = 0x020000 + back_buffer
     out0 (SAR0B), a
-    ld a, 0x01              ; physical address = 0x011000
+    ld a, 0x01              ; physical address = 0x010000 + video memory address
     out0 (DAR0B), a
 
     ld a, 0x02
@@ -277,7 +308,7 @@ DPYFLSH:
     ld a, 0x40
     out0 (DCNTL), a
 
-    ; Actually do the update.
+    ; Update the character data.
 
     ld hl, back_buffer
     add hl, bc
@@ -288,6 +319,23 @@ DPYFLSH:
     add hl, bc
     out0 (DAR0H), h
     out0 (DAR0L), l
+
+    ld hl, SCREEN_WIDTH*5
+    out0 (BCR0H), h
+    out0 (BCR0L), l
+
+    ld a, 0x40
+    out0 (DSTAT), a
+
+    ; Update the attribute data.
+
+    ld hl, attr_buffer
+    add hl, bc
+    out0 (SAR0H), h
+    out0 (SAR0L), l
+
+    out0 (DAR0H), b
+    out0 (DAR0L), c
 
     ld hl, SCREEN_WIDTH*5
     out0 (BCR0H), h
@@ -335,10 +383,18 @@ video_memory_address_table:
     endm
 
     dseg
-back_buffer: ds SCREEN_WIDTH * SCREEN_HEIGHT
-back_buffer_end:
 old_blanking: db 0
 displayed_bank: db 0
+
+    aseg
+    ; Deliberately chosen so that setting bit 11 switches address to the
+    ; attribute buffer.
+    org 0xd000
+back_buffer: ds SCREEN_WIDTH * SCREEN_HEIGHT
+back_buffer_end:
+    org 0xd800
+attr_buffer: ds SCREEN_WIDTH * SCREEN_HEIGHT
+attr_buffer_end:
 
 ; vim: ts=4 sw=4 et ft=asm
 

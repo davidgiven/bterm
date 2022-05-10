@@ -12,6 +12,11 @@
     extern TTYINIT
     extern TTYPH8
 
+    global DMALDIR
+    global DMALDDR
+
+    maclib z180
+
 	cseg
 entry:
     call DPYINIT
@@ -35,6 +40,38 @@ loop:
 
 	jr loop
 	ret
+
+    ; Memory-to-memory only, no video memory!
+DMALDIR:
+    ld a, 0x02
+do_dma:
+    out0 (DMODE), a
+
+    ; Set up for DMA.
+
+    ld a, 0x02              ; physical address = 0x020000 + back_buffer
+    out0 (SAR0B), a
+    out0 (DAR0B), a
+
+    ld a, 0x40
+    out0 (DCNTL), a
+
+    out0 (SAR0H), h
+    out0 (SAR0L), l
+
+    out0 (DAR0H), d
+    out0 (DAR0L), e
+
+    out0 (BCR0H), b
+    out0 (BCR0L), c
+
+    ld a, 0x40
+    out0 (DSTAT), a
+    ret
+
+DMALDDR:
+    ld a, 0x16
+    jr do_dma
 
 ; vim: ts=4 sw=4 et ft=asm
 

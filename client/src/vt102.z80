@@ -6,6 +6,8 @@
     extern DPYPRNA
     extern DPYPRNU
     extern KBDTYPE
+    extern TTYPSI
+    extern TTYPD16
 
     global TTYPUTC
     global TTYINIT
@@ -68,6 +70,8 @@ print_ascii:
     ret c
 
 print_printable:
+    ld a, (attributes)
+    ld b, a
     ld de, (cursorx)
     call DPYPRNA
     ; fall through
@@ -82,6 +86,8 @@ advance_cursor:
     jp do_linefeed
 
 print_utf8:
+    ld a, (attributes)
+    ld b, a
     ld hl, (utf8_char)
     ld de, (cursorx)
     call DPYPRNU
@@ -162,17 +168,18 @@ defstate csi
 .1
     cp ';'          ; advance to next parameter
     jp nz, .2
-    ld a, (currentparam)
+    ld hl, currentparam
+    ld a, (hl)
     cp NPARS - 1
     ret z
-    inc a
-    ld (currentparam), a
+    inc (hl)
     ret
 .2
     cp '0'
     jp c, set_state_waiting     ; invalid char, give up
     cp '9'+1
     jp nc, .3                   ; not a digit, must have command byte
+
     ; Parse decimal parameter: first calculate the parameter address
     ld a, (currentparam)
     add a
@@ -265,6 +272,8 @@ csi_non_private:
     jp z, do_csi_cup
     cp 'n'
     jp z, do_csi_dsr
+    cp 'm'
+    jp z, do_csi_sgr
     ret
 csi_private:
     ; Private command set here
@@ -410,6 +419,7 @@ do_csi_el_start_to_cursor:
 
     push af
     push de
+    ld bc, ' '
     call DPYPRNA
     pop de
     pop af
@@ -426,7 +436,7 @@ do_csi_el_cursor_to_end:
 
     push af
     push de
-    ld c, ' '
+    ld bc, ' '
     call DPYPRNA
     pop de
     pop af
@@ -483,17 +493,22 @@ do_csi_da:
 do_decsc:
     ld hl, (cursorx)
     ld (saved_cursorx), hl
+    ld a, (attributes)
+    ld (saved_attributes), a
     ret
 
 ; Restore cursor and attributes
 do_decrc:
     ld hl, (saved_cursorx)
     ld (cursorx), hl
+    ld a, (saved_attributes)
+    ld (attributes), a
     jp update_cursor
 
     dseg
 saved_cursorx: db 0
 saved_cursory: db 0
+saved_attributes: db 0
     cseg
 
 ; Device status report --- what is reported varies by parameter.
@@ -527,6 +542,73 @@ do_csi_dsr_report_cursor_position:
     ld a, 'R'
     jp KBDTYPE
     
+do_csi_sgr:
+    ld a, (currentparam)
+    inc a
+    ld b, a
+    ld hl, parameters
+.1
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    inc hl
+
+    push bc
+    push hl
+    call set_attribute
+    pop hl
+    pop bc
+
+    djnz .1
+    ret
+
+all_attributes_off:
+    xor a
+    ld (attributes), a
+    ret
+
+; Set attribute in de.
+set_attribute:
+    ld a, d
+    or a
+    ret nz              ; don't support any attributes > 255
+
+    ld hl, attributes
+    ld a, e
+    cp 0                ; all off
+    jr z, all_attributes_off
+
+    cp 1                ; bold on
+    jr nz, .1
+    set ATTRIBUTE_BOLD_BIT, (hl)
+    ret
+.1
+    cp 4                ; underline on
+    jr nz, .2
+    set ATTRIBUTE_UNDERLINE_BIT, (hl)
+    ret
+.2
+    cp 7                ; reverse video on
+    jr nz, .3
+    set ATTRIBUTE_REVERSE_BIT, (hl)
+    ret
+.3
+    cp 22               ; bold off
+    jr nz, .4
+    res ATTRIBUTE_BOLD_BIT, (hl)
+    ret
+.4
+    cp 24               ; underline off
+    jr nz, .5
+    res ATTRIBUTE_UNDERLINE_BIT, (hl)
+    ret
+.5
+    cp 27               ; reverse video off
+    jr nz, .6
+    res ATTRIBUTE_REVERSE_BIT, (hl)
+.6
+    ret
+
 ; --- Simple motion ---------------------------------------------------------
 
 update_cursor:
@@ -739,6 +821,7 @@ utf8_char:			dw 0
 
 cursorx:            db 0
 cursory:            db 0
+attributes:         db 0
 
 start_csi_state:    
 commandflags:       db 0
