@@ -257,10 +257,10 @@ csi_non_private:
     jp nz, .4
     ld a, (parameters+0)
     or a
-    jp z, do_csi_el_cursor_to_end
+    jp z, do_csi_el_cursor_to_end ; param = 0
     dec a
-    jp z, do_csi_el_start_to_cursor
-    jp do_csi_el_all
+    jp z, do_csi_el_start_to_cursor ; param = 1
+    jp do_csi_el_all    ; everything else
 .4
     cp 'L'
     jp z, do_csi_il
@@ -412,7 +412,9 @@ erase_lines_d_to_e:
 ; Erase from start of line to cursor.
 do_csi_el_start_to_cursor:
     ld de, (cursorx)
-    xor a
+    ld a, e
+    ld e, 0
+
 .1
     cp e
     ret z
@@ -424,7 +426,7 @@ do_csi_el_start_to_cursor:
     pop de
     pop af
 
-    inc a
+    inc e
     jr .1
 
 do_csi_el_cursor_to_end:

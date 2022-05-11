@@ -11,6 +11,7 @@
     extern KBDPUSH
     extern TTYINIT
     extern TTYPH8
+    extern TTYPSI
 
     global DMALDIR
     global DMALDDR
@@ -23,6 +24,12 @@ entry:
     call TTYINIT
 	call INTINIT
     call KBDINIT
+
+    call TTYPSI
+    db 'BTerm VT102-ish terminal emulator (C) 2022 David Given', 13, 10
+    db 'Terminal running', 13, 10
+    db 13, 10
+    db 0
 
 loop:
     call DPYFLSH
