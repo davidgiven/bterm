@@ -96,7 +96,6 @@ print_utf8:
 ; UTF8_TRAILER: reading UTF-8 trailer bytes
 
 defstate utf8_trailer
-    call set_state_waiting
     ld hl, (utf8_char)
     add hl, hl
     add hl, hl
@@ -114,6 +113,7 @@ defstate utf8_trailer
     ld hl, pending_utf8_bytes
     dec (hl)
     ret nz
+    call set_state_waiting
     jr print_utf8
 
 ; ESCAPE: seen a ESC
