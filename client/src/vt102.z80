@@ -33,7 +33,7 @@ TTYINIT:
     ld (current_state), hl
     call do_ed_all
     ld de, 0
-    jp DPYCURS
+    jr DPYCURS
 
 	; On entry: C = character to print
 TTYPUTC:
@@ -48,24 +48,24 @@ TTYPUTC:
 
 defstate waiting
 	bit 7, c
-	jp nz, start_utf8_sequence
+	jr nz, start_utf8_sequence
 print_ascii:
     call set_state_waiting
     ld a, c
     cp 8
-    jp z, do_backspace
+    jr z, do_backspace
     cp 9
-    jp z, do_tab
+    jr z, do_tab
     cp 10
-    jp z, do_linefeed
+    jr z, do_linefeed
     cp 11
-    jp z, do_linefeed
+    jr z, do_linefeed
     cp 12
-    jp z, do_linefeed
+    jr z, do_linefeed
     cp 13
-    jp z, do_carriagereturn
+    jr z, do_carriagereturn
     cp 27
-    jp z, set_state_escape
+    jr z, set_state_escape
     cp 32
     ret c
 
@@ -80,10 +80,10 @@ advance_cursor:
     inc (hl)
     ld a, SCREEN_WIDTH
     cp (hl)
-    jp nz, update_cursor
+    jr nz, update_cursor
 
     ld (hl), 0          ; reset X to zero
-    jp do_linefeed
+    jr do_linefeed
 
 print_utf8:
     ld a, (attributes)
@@ -114,7 +114,7 @@ defstate utf8_trailer
     ld hl, pending_utf8_bytes
     dec (hl)
     ret nz
-    jp print_utf8
+    jr print_utf8
 
 ; ESCAPE: seen a ESC
 
@@ -122,31 +122,31 @@ defstate escape
     call set_state_waiting
     ld a, c
     cp 'D'
-    jp z, do_linefeed
+    jr z, do_linefeed
     cp 'E'
-    jp z, do_newline
+    jr z, do_newline
     cp 'M'
-    jp z, do_reverse_linefeed
+    jr z, do_reverse_linefeed
     cp 'Z'
-    jp z, do_csi_da
+    jr z, do_csi_da
     cp '7'
-    jp z, do_decsc
+    jr z, do_decsc
     cp '8'
-    jp z, do_decrc
+    jr z, do_decrc
     cp '['
-    jp z, init_state_csi
+    jr z, init_state_csi
     cp '%'
-    jp z, set_state_gobble_1
+    jr z, set_state_gobble_1
     cp '('
-    jp z, set_state_gobble_1
+    jr z, set_state_gobble_1
     cp '#'
-    jp z, set_state_gobble_1
+    jr z, set_state_gobble_1
     ret
 
 ; GOBBLE_1: discards the next character
 
 defstate gobble_1
-    jp set_state_waiting
+    jr set_state_waiting
 
 ; CSI: the big, complicated one
 
@@ -161,13 +161,13 @@ defstate csi
     ld a, c
 
     cp '?'          ; 'private' flag
-    jp nz, .1
+    jr nz, .1
     ld hl, commandflags
     set COMMANDFLAG_PRIVATE_BIT, (hl)
     ret
 .1
     cp ';'          ; advance to next parameter
-    jp nz, .2
+    jr nz, .2
     ld hl, currentparam
     ld a, (hl)
     cp NPARS - 1
@@ -176,9 +176,9 @@ defstate csi
     ret
 .2
     cp '0'
-    jp c, set_state_waiting     ; invalid char, give up
+    jr c, set_state_waiting     ; invalid char, give up
     cp '9'+1
-    jp nc, .3                   ; not a digit, must have command byte
+    jr nc, .3                   ; not a digit, must have command byte
 
     ; Parse decimal parameter: first calculate the parameter address
     ld a, (currentparam)
@@ -214,66 +214,66 @@ defstate csi
     call set_state_waiting
     ld hl, commandflags
     bit COMMANDFLAG_PRIVATE_BIT, (hl)
-    jp nz, csi_private
+    jr nz, csi_private
 
     ; Non-private command set here
     
 csi_non_private:
     ld a, c
     cp 'A'
-    jp z, do_csi_cuu
+    jr z, do_csi_cuu
     cp 'B'
-    jp z, do_csi_cud
+    jr z, do_csi_cud
     cp 'C'
-    jp z, do_csi_cuf
+    jr z, do_csi_cuf
     cp 'D'
-    jp z, do_csi_cub
+    jr z, do_csi_cub
     cp 'E'              ; CNL, move down and go to column one
-    jp nz, .1
+    jr nz, .1
     xor a
     ld (cursorx), a
-    jp do_csi_cud
+    jr do_csi_cud
 .1
     cp 'F'              ; CPL, move dup and go to column one
-    jp nz, .2
+    jr nz, .2
     xor a
     ld (cursorx), a
-    jp do_csi_cuu
+    jr do_csi_cuu
 .2
     cp 'G'
-    jp z, do_csi_cha
+    jr z, do_csi_cha
     cp 'H'
-    jp z, do_csi_cup
+    jr z, do_csi_cup
     cp 'J'              ; ED, erase display
-    jp nz, .3
+    jr nz, .3
     ld a, (parameters+0)
     or a
-    jp z, do_ed_cursor_to_end
+    jr z, do_ed_cursor_to_end
     dec a
-    jp z, do_ed_start_to_cursor
-    jp do_ed_all
+    jr z, do_ed_start_to_cursor
+    jr do_ed_all
 .3
     cp 'K'              ; EL, erase line
-    jp nz, .4
+    jr nz, .4
     ld a, (parameters+0)
     or a
-    jp z, do_csi_el_cursor_to_end ; param = 0
+    jr z, do_csi_el_cursor_to_end ; param = 0
     dec a
-    jp z, do_csi_el_start_to_cursor ; param = 1
-    jp do_csi_el_all    ; everything else
+    jr z, do_csi_el_start_to_cursor ; param = 1
+    jr do_csi_el_all    ; everything else
 .4
     cp 'L'
-    jp z, do_csi_il
+    jr z, do_csi_il
     cp 'M'
-    jp z, do_csi_dl
+    jr z, do_csi_dl
     cp 'c'
-    jp z, do_csi_da
+    jr z, do_csi_da
     cp 'f'
-    jp z, do_csi_cup
+    jr z, do_csi_cup
     cp 'n'
-    jp z, do_csi_dsr
+    jr z, do_csi_dsr
     cp 'm'
-    jp z, do_csi_sgr
+    jr z, do_csi_sgr
     ret
 csi_private:
     ; Private command set here
@@ -284,76 +284,76 @@ do_csi_cuu:
     ld hl, cursory
     ld a, (parameters+0)
     or a
-    jp nz, .2
+    jr nz, .2
     inc a
 .2
     neg
     add (hl)
-    jp c, .1
+    jr c, .1
     xor a
 .1
     ld (cursory), a
-    jp update_cursor
+    jr update_cursor
 
 ; Moves cursor down by (parameters+0) rows (no scrolling).
 do_csi_cud:
     ld hl, cursory
     ld a, (parameters+0)
     or a
-    jp nz, .2
+    jr nz, .2
     inc a
 .2
     add (hl)
     cp SCREEN_HEIGHT
-    jp c, .1
+    jr c, .1
     ld a, SCREEN_HEIGHT-1
 .1
     ld (cursory), a
-    jp update_cursor
+    jr update_cursor
 
 ; Moves cursor left by (parameters+0) rows (no wrap).
 do_csi_cub:
     ld hl, cursorx
     ld a, (parameters+0)
     or a
-    jp nz, .2
+    jr nz, .2
     inc a
 .2
     neg
     add (hl)
-    jp c, .1
+    jr c, .1
     xor a
 .1
     ld (cursorx), a
-    jp update_cursor
+    jr update_cursor
 
 ; Moves cursor right by (parameters+0) rows (no wrap).
 do_csi_cuf:
     ld hl, cursorx
     ld a, (parameters+0)
     or a
-    jp nz, .2
+    jr nz, .2
     inc a
 .2
     add (hl)
     cp SCREEN_WIDTH
-    jp c, .1
+    jr c, .1
     ld a, SCREEN_WIDTH-1
 .1
     ld (cursorx), a
-    jp update_cursor
+    jr update_cursor
 
 ; Move to indicated column in current row.
 do_csi_cha:
     ld a, (parameters+0)
-    jp setx
+    jr setx
 
 ; Move to a particular location.
 do_csi_cup:
     ld a, (parameters+0)
     call sety
     ld a, (parameters+2)
-    jp setx
+    jr setx
     
 ; Erase from start to cursor.
 do_ed_start_to_cursor:
@@ -364,7 +364,7 @@ do_ed_start_to_cursor:
     else
         call DPYCLRA
     endif
-    jp do_csi_el_start_to_cursor
+    jr do_csi_el_start_to_cursor
 
 ; Erase from cursor to end.
 do_ed_cursor_to_end:
@@ -377,7 +377,7 @@ do_ed_cursor_to_end:
     else
         call DPYCLRA
     endif
-    jp do_csi_el_cursor_to_end
+    jr do_csi_el_cursor_to_end
 
 ; Erase all.
 do_ed_all:
@@ -385,7 +385,7 @@ do_ed_all:
     if EMULATE_DPYCLRA
         jr erase_lines_d_to_e
     else
-        jp DPYCLRA
+        jr DPYCLRA
     endif
 
     if EMULATE_DPYCLRA
@@ -404,7 +404,7 @@ erase_lines_d_to_e:
     inc d
     ld a, d
     cp e
-    jp nz, .1
+    jr nz, .1
     ret
     
     endif
@@ -449,7 +449,7 @@ do_csi_el_cursor_to_end:
 ; Erase current line.
 do_csi_el_all:
     ld de, (cursorx)
-    jp DPYCLRL
+    jr DPYCLRL
 
 ; Insert lines.
 do_csi_il:
@@ -487,7 +487,7 @@ do_csi_dl:
 ; Identify terminal.
 do_csi_da:
     ld hl, .1
-    jp TTYTYPS
+    jr TTYTYPS
 .1:
     db 27, "[?6c", 0
 
@@ -505,7 +505,7 @@ do_decrc:
     ld (cursorx), hl
     ld a, (saved_attributes)
     ld (attributes), a
-    jp update_cursor
+    jr update_cursor
 
     dseg
 saved_cursorx: db 0
@@ -517,14 +517,14 @@ saved_attributes: db 0
 do_csi_dsr:
     ld a, (parameters+0)
     cp 5                ; Terminal status?
-    jp z, do_csi_dsr_terminal_status
+    jr z, do_csi_dsr_terminal_status
     cp 6                ; Report cursor position?
-    jp z, do_csi_dsr_report_cursor_position
+    jr z, do_csi_dsr_report_cursor_position
     ret
 
 do_csi_dsr_terminal_status:
     ld hl, .1
-    jp TTYTYPS
+    jr TTYTYPS
 .1
     db 27, "[0n", 0
 
@@ -542,7 +542,7 @@ do_csi_dsr_report_cursor_position:
     inc a
     call TTYTYPD
     ld a, 'R'
-    jp KBDTYPE
+    jr KBDTYPE
     
 do_csi_sgr:
     ld a, (currentparam)
@@ -615,7 +615,7 @@ set_attribute:
 
 update_cursor:
     ld de, (cursorx)
-    jp DPYCURS
+    jr DPYCURS
 
 do_backspace:
     ld a, (cursorx)
@@ -624,7 +624,7 @@ do_backspace:
 
     dec a
     ld (cursorx), a
-    jp update_cursor
+    jr update_cursor
 
 do_tab:
     ld de, (cursorx)
@@ -643,18 +643,18 @@ do_tab:
 do_linefeed:
     ld a, (cursory)
     cp SCREEN_HEIGHT - 1
-    jp z, scroll_up
+    jr z, scroll_up
     inc a
     ld (cursory), a
-    jp update_cursor
+    jr update_cursor
 
 do_reverse_linefeed:
     ld a, (cursory)
     or a
-    jp z, scroll_down
+    jr z, scroll_down
     dec a
     ld (cursory), a
-    jp update_cursor
+    jr update_cursor
 
 do_newline:
     call do_linefeed
@@ -662,86 +662,86 @@ do_newline:
 do_carriagereturn:
     xor a
     ld (cursorx), a
-    jp update_cursor
+    jr update_cursor
 
 ; Set X coordinate to A (1 being the left column)
 setx:
     or a
-    jp z, .1                ; zero means home
+    jr z, .1                ; zero means home
     dec a                   ; convert to our numbering scheme
 .1
     cp SCREEN_WIDTH
-    jp c, .2
+    jr c, .2
     ld a, SCREEN_WIDTH-1
 .2
     ld (cursorx), a
-    jp update_cursor
+    jr update_cursor
 
 ; Set Y coordinate to A (1 being the left column)
 sety:
     or a
-    jp z, .1                ; zero means home
+    jr z, .1                ; zero means home
     dec a                   ; convert to our numbering scheme
 .1
     cp SCREEN_HEIGHT
-    jp c, .2
+    jr c, .2
     ld a, SCREEN_HEIGHT-1
 .2
     ld (cursory), a
-    jp update_cursor
+    jr update_cursor
 
 ; --- UTF-8 handling --------------------------------------------------------
 
 start_utf8_sequence:
     call parse_utf8_leader
     or a
-    jp z, .1
+    jr z, .1
     ld (pending_utf8_bytes), a
     ld a, b
     and c           ; mask leader byte
     ld l, a
     ld h, 0
     ld (utf8_char), hl
-    jp set_state_utf8_trailer
+    jr set_state_utf8_trailer
 .1
     ; Got an invalid UTF-8 byte
     ld a, 0x7f
     and c           ; crudely convert to ASCII
-    jp print_ascii
+    jr print_ascii
 
 parse_utf8_leader:
 	ld a, c
 	srl a
 	cp 0x7e			; 01111110, 6-byte sequence
-	jp nz, .1
+	jr nz, .1
 	ld a, 5			; number of remaining bytes
 	ld b, 0x01		; leading char mask
 	ret
 .1
 	srl a
 	cp 0x3e         ; 00111110, 5-byte sequence
-	jp nz, .2
+	jr nz, .2
 	ld a, 4			; number of remaining bytes
 	ld b, 0x03		; leading char mask
 	ret
 .2
 	srl a
 	cp 0x1e         ; 00011110, 4-byte sequence
-	jp nz, .3
+	jr nz, .3
 	ld a, 3			; number of remaining bytes
 	ld b, 0x07		; leading char mask
 	ret
 .3
 	srl a
 	cp 0x0e         ; 00001110, 3-byte sequence
-	jp nz, .4
+	jr nz, .4
 	ld a, 2			; number of remaining bytes
 	ld b, 0x0f		; leading char mask
 	ret
 .4
 	srl a
 	cp 0x06         ; 00000110, 2-byte sequence
-	jp nz, .5
+	jr nz, .5
 	ld a, 1			; number of remaining bytes
 	ld b, 0x1f		; leading char mask
 	ret
@@ -754,11 +754,11 @@ parse_utf8_leader:
 
 scroll_up:
     ld d, 0
-    jp DPYDELL
+    jr DPYDELL
 
 scroll_down:
     ld d, 0
-    jp DPYINSL
+    jr DPYINSL
 
 ; --- Reporting -------------------------------------------------------------
 
@@ -812,7 +812,7 @@ TTYTYPS:
     push hl
     call KBDTYPE
     pop hl
-    jp .1
+    jr .1
 
 ; --- Variables -------------------------------------------------------------
 
