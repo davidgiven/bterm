@@ -6,6 +6,7 @@
     extern INTREAD
     extern INTSTAT
     extern INTWRIT
+    extern KBDGETC
     extern KBDINIT
     extern KBDPULL
     extern KBDPUSH
@@ -24,9 +25,77 @@ entry:
     call TTYINIT
 	call INTINIT
     call KBDINIT
+    call DPYFLSH
+
+    if 0
+    ld c, 0
+    ld hl, 0xf000
+.inner:
+    ld (hl), c
+    inc hl
+    inc hl
+    inc c
+
+    ld a, c
+    or a
+    jr z, .end
+    and 0x1f
+    jr nz, .inner
+
+.outer:
+    ld de, 91 - 64
+    add hl, de
+    jr .inner
+
+.end:
+    ld a, 0
+    call .fill
+    call KBDGETC
+
+    ld a, 1
+    call .fill
+    call KBDGETC
+
+    ld a, 2
+    call .fill
+    call KBDGETC
+
+    ld a, 4
+    call .fill
+    call KBDGETC
+
+    ld a, 8
+    call .fill
+    call KBDGETC
+
+    ld a, 16
+    call .fill
+    call KBDGETC
+
+    ld a, 32
+    call .fill
+    call KBDGETC
+
+    ld a, 64
+    call .fill
+    call KBDGETC
+
+    ld a, 123
+    call .fill
+    call KBDGETC
+    jr .end
+
+.fill
+    ld hl, 0xe000
+    ld de, 0xe001
+    ld (hl), a
+    ld bc, 91*15
+    ldir
+    ret
+    endif
 
     call TTYPSI
-    db 'BTerm VT102-ish terminal emulator (C) 2022 David Given', 13, 10
+    db 'BTerm VT102-ish terminal emulator © 2022 David Given', 13, 10
     db 'Terminal running', 13, 10
     db 13, 10
     db 0

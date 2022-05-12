@@ -2,6 +2,7 @@
     global KBDPULL
     global KBDPUSH
     global KBDTYPE
+    global KBDGETC
 
     extern TTYTYPD
 
@@ -199,6 +200,14 @@ caps_pressed:
     ret
 
     include 'keymap.inc'
+
+KBDGETC:
+    call KBDPULL
+    ld a, c
+    or a
+    ret nz
+    call KBDPUSH
+    jr KBDGETC
 
     dseg
 keyboard_modifiers: db 0

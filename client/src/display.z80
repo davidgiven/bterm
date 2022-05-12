@@ -41,8 +41,9 @@ DPYPRNA:
     ld hl, character_map_table
     adda16 h, l
     ld c, (hl)              ; screencode
+    ; fall through
 
-    ; Write
+display_screencode:
     call calc_backbuffer_address
     ld (hl), c
 
@@ -71,8 +72,66 @@ calc_backbuffer_address:
 
 ; B = attributes; HL = char; DE = (y, x)
 DPYPRNU:
-    ld c, 'X'
-    jr DPYPRNA
+    ld a, h
+    or a
+    jr nz, unicode_big      ; top byte non-zero?
+
+    bit 7, l
+    jr nz, unicode_0x80      ; low unicode?
+
+    ld c, l
+    jr DPYPRNA               ; actually ASCII
+
+unicode_big:
+    push de
+    push bc
+    call convert_unicode
+    pop bc
+    pop de
+    ld c, a
+    jr display_screencode
+
+    ; L contains an 8-bit codepoint with the top bit set.
+unicode_0x80:
+    ld a, l
+    and 0x7f
+    sub 0x20
+    jr c, unicode_invalid
+    ld hl, unicode_low_table
+    adda16 h, l
+    ld c, (hl)              ; screencode
+    jr display_screencode
+
+unicode_invalid:
+    ld c, 0x0d              ; dotted box
+    jr display_screencode
+
+; Convert the codepoint in hl to a brother char in a.
+
+convert_unicode:
+    ld b, h
+    ld c, l                 ; char -> bc
+    ld hl, unicode_map_table
+.1
+    ld e, (hl)
+    inc hl
+    ld d, (hl)
+    inc hl
+    bit 7, d
+    jr nz, .2
+    ld a, (hl)
+    inc hl                  ; candidate codepoint -> hl, brother -> a
+
+    ex de, hl               ; candidate -> hl, pointer -> de
+    ccf
+    sbc hl, bc
+    ret z                   ; return if matches
+    ex de, hl               ; pointer -> hl
+    jr .1
+
+.2
+    ld a, 0x0d              ; dotted box
+    ret
 
 ; On entry: DE = (y, x)
 DPYCURS:
@@ -367,6 +426,60 @@ character_map_table:
     db 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o'
     db 'p', 'q', 'r', 's', 't', 'u', 'v', 'w'
     db 'x', 'y', 'z', $cc, $9b, $cd, $8f, $0d
+
+; Maps from Unicode (minus $a0) to the Brother character set.
+
+unicode_low_table:
+    db ' ', $11, $19, $10, $18, $16, $9b, $7e ; a0
+    db $8c, $9d, $9a, $0d, $0d, ' ', $91, $0d ; a8
+    db $60, $5c, $5e, $7f, $eb, $dd, $7d, $0d ; b0
+    db $0d, $a1, $60, $0d, $7b, $7c, $1e, $12 ; b8
+    db 'A', 'A', 'A', 'A', $a2, 'A', $0d, $b8 ; c0
+    db 'E', 'E', 'E', 'E', 'I', 'I', 'I', 'I' ; c8
+    db 'D', $14, 'O', 'O', 'O', 'O', $b6, $17 ; d0
+    db 'O', 'U', 'U', 'U', $ab, 'Y', $0d, $13 ; d8
+    db $e1, 'a', $ec, 'a', $a3, 'a', $0d, $e8 ; e0
+    db $e2, $e4, $e7, 'e', 'i', 'i', 'i', $e5 ; e8
+    db $0d, $15, 'o', 'o', $e9, 'o', $e6, $98 ; f0
+    db 'o', $e3, 'u', 'u', 'u', 'y', $0d, 'y' ; f8
+
+; Maps from 16-bit unicode to the Brother character set.
+
+unicode macro u, b
+    dw u
+    db b
+endm
+
+unicode_map_table:
+    unicode 0x2190, 0x01 ; right arrow
+    unicode 0x25b7, 0x01 ; right arrow
+    unicode 0x21b2, 0x02 ; 'return' arrow
+    unicode 0x21e5, 0x03 ; right arrow to bar
+    unicode 0x2500, 0x05 ; horizontal bar
+    unicode 0x2502, 0x0f ; vertical bar
+    unicode 0x250c, 0x20 ; top-left corner
+    unicode 0x2510, 0x20 ; top-right corner
+    unicode 0x2514, 0x20 ; bottom-left corner
+    unicode 0x2518, 0x20 ; bottom-right corner
+    unicode 0x2594, 0x05 ; horizontal bar
+    unicode 0x25ba, 0x06 ; right triangle
+    unicode 0x25c4, 0x07 ; left triangle
+    unicode 0x25bc, 0x08 ; down triangle black
+    unicode 0x25cc, 0x0d ; dotted circle / box
+
+    unicode 0x00a0, 0x20 ; non-breaking space
+    unicode 0x00a1, 0x11 ; inverted exclamation mark
+    unicode 0x00a2, 0x19 ; cent sign
+    unicode 0x00a3, 0x10 ; pound sign
+    unicode 0x00a9, 0x9d ; copyright sign
+    unicode 0x00ae, 0x91 ; registered sign
+    unicode 0x00bf, 0x12 ; inverted question mark
+    unicode 0x2018, 0xfa ; left quote
+    unicode 0x2019, 0xfb ; right quote
+    unicode 0x201c, 0x22 ; left double quote
+    unicode 0x201d, 0x22 ; right double quote
+
+    dw 0xff
 
 back_buffer_address_table:
     line_no = 0
