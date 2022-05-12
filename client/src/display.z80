@@ -401,7 +401,7 @@ DPYFLSH:
     out0 (DSTAT), a
     ret
 
-; Page array: points at the five-line blocks we update each frame.
+; Page array: points at the four-line blocks we update each frame.
 
 page_array:
     dw SCREEN_STRIDE*0
