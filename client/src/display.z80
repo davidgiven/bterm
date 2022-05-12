@@ -340,10 +340,7 @@ DPYFLSH:
     ld hl, displayed_bank
     ld a, (hl)
     inc a
-    cp 3
-    jr nz, .1
-    xor a
-.1
+    and 3
     ld (hl), a
     
     ; Get the offset of the block to update.
@@ -379,7 +376,7 @@ DPYFLSH:
     out0 (DAR0H), h
     out0 (DAR0L), l
 
-    ld hl, SCREEN_WIDTH*5
+    ld hl, SCREEN_WIDTH*4
     out0 (BCR0H), h
     out0 (BCR0L), l
 
@@ -396,7 +393,7 @@ DPYFLSH:
     out0 (DAR0H), b
     out0 (DAR0L), c
 
-    ld hl, SCREEN_WIDTH*5
+    ld hl, SCREEN_WIDTH*4
     out0 (BCR0H), h
     out0 (BCR0L), l
 
@@ -408,8 +405,9 @@ DPYFLSH:
 
 page_array:
     dw SCREEN_STRIDE*0
-    dw SCREEN_STRIDE*5
-    dw SCREEN_STRIDE*10
+    dw SCREEN_STRIDE*4
+    dw SCREEN_STRIDE*8
+    dw SCREEN_STRIDE*12
 
 ; Maps from ASCII (minus $20) to the Brother character set.
 
