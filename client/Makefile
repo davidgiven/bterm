@@ -27,7 +27,7 @@ $(OBJDIR)/bterm.img: $(OBJS) Makefile
 	ld80 -m -O bin -o $@.all -P7000 $(OBJS)
 	tail -c+28673 $@.all > $@
 
-$(OBJDIR)/%.rel: %.z80 Makefile src/constants.lib
+$(OBJDIR)/%.rel: %.z80 Makefile src/constants.lib src/jif.lib
 	@mkdir -p $(dir $@)
 	zmac $(ZMAC_FLAGS) --rel7 -o $@ -o $(patsubst %.rel,%.lst,$@) $<
 	

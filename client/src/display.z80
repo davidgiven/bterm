@@ -14,6 +14,7 @@
 
     maclib constants
     maclib z180
+    maclib jif
 
 	cseg
 
@@ -74,37 +75,33 @@ calc_backbuffer_address:
 DPYPRNU:
     ld a, h
     or a
-    jr nz, unicode_big      ; top byte non-zero?
+    jif nz                  ; top byte non-zero?
+        push de
+        push bc
+        call convert_unicode
+        pop bc
+        pop de
+        ld c, a
+        jr display_screencode
+    jendif
 
     bit 7, l
-    jr nz, unicode_0x80      ; low unicode?
+    jif nz                  ; low unicode?
+        ld a, l
+        and 0x7f
+        sub 0x20
+        jif c
+            ld c, 0x0d              ; dotted box
+            jr display_screencode
+        jendif
+        ld hl, unicode_low_table
+        adda16 h, l
+        ld c, (hl)              ; screencode
+        jr display_screencode
+    jendif
 
     ld c, l
     jr DPYPRNA               ; actually ASCII
-
-unicode_big:
-    push de
-    push bc
-    call convert_unicode
-    pop bc
-    pop de
-    ld c, a
-    jr display_screencode
-
-    ; L contains an 8-bit codepoint with the top bit set.
-unicode_0x80:
-    ld a, l
-    and 0x7f
-    sub 0x20
-    jr c, unicode_invalid
-    ld hl, unicode_low_table
-    adda16 h, l
-    ld c, (hl)              ; screencode
-    jr display_screencode
-
-unicode_invalid:
-    ld c, 0x0d              ; dotted box
-    jr display_screencode
 
 ; Convert the codepoint in hl to a brother char in a.
 
