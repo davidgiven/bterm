@@ -2,6 +2,7 @@
     global DPYCLRA
     global DPYCLRL
     global DPYDELL
+    global DPYIDLE
     global DPYINIT
     global DPYINSL
     global DPYPRNA
@@ -34,7 +35,70 @@ set_6544_reg:
     out0 (VIDEO_DATA), e
     ret
 
+; Called when the input serial port is idle.
+DPYIDLE:
+    ld hl, is_idle
+    bit 0, (hl)
+    ret nz                  ; do nothing if already idle
+    inc (hl)                ; mark as idle
+
+    ; Calculate video memory line address
+    ld de, (cursor_pos)
+    ld hl, video_memory_address_table
+    ld a, d
+    add a
+    adda16 h, l             ; [address] -> hl
+
+    ld a, (hl)
+    inc hl
+    ld h, (hl)
+    ld l, a                 ; address -> hl
+
+    ; Calculate address of cursor
+    ld a, e
+    adda16 h, l             ; address -> hl
+
+    ld a, 15
+    out0 (VIDEO_ADDR), a
+    nop
+    out0 (VIDEO_DATA), l
+    ld a, 14
+    out0 (VIDEO_ADDR), a
+    ld a, h
+    and $0f
+    out0 (VIDEO_DATA), a
+
+    ; Cursor on.
+    ld de, 0x0a60       ; cursor 1 start
+    call set_6544_reg
+
+    ; Adjust the bank being refreshed so that the block where the cursor
+    ; is gets refreshed first.
+
+    ld a, (cursor_pos+1)    ; get Y
+    rra
+    rra                     ; rotate right by two
+    dec a                   ; bank is incremented _before_ drawing
+    and 3                   ; mask off junk bits
+    ld (displayed_bank), a
+
+    ret
+
+dpybusy:
+    ld hl, is_idle
+    bit 0, (hl)
+    ret z                   ; do nothing if already busy
+    dec (hl)
+
+    ; Cursor off.
+
+    ld de, 0x0a20       ; cursor 1 start
+    call set_6544_reg
+
+    ret
+
 ; B = attributes; C = char; DE = (y, x)
+; Always exits through display_screencode.
 DPYPRNA:
     ; Convert ASCII value
     ld a, c
@@ -51,7 +115,7 @@ display_screencode:
     set 3, h                ; convert address to attribute space
     ld (hl), b
 
-    ret
+    jr dpybusy
 
 ; Given a cursor location in de, calculates the address in hl.
 calc_backbuffer_address:
@@ -72,6 +136,7 @@ calc_backbuffer_address:
     ret
 
 ; B = attributes; HL = char; DE = (y, x)
+; Always exits through display_screencode.
 DPYPRNU:
     ld a, h
     or a
@@ -132,32 +197,8 @@ convert_unicode:
 
 ; On entry: DE = (y, x)
 DPYCURS:
-    ; Calculate video memory line address
-    ld hl, video_memory_address_table
-    ld a, d
-    add a
-    adda16 h, l             ; [address] -> hl
-
-    ld a, (hl)
-    inc hl
-    ld h, (hl)
-    ld l, a                 ; address -> hl
-
-    ; Calculate address of cursor
-    ld a, e
-    adda16 h, l             ; address -> hl
-
-    ld a, 15
-    out0 (VIDEO_ADDR), a
-    nop
-    out0 (VIDEO_DATA), l
-    ld a, 14
-    out0 (VIDEO_ADDR), a
-    ld a, h
-    and $0f
-    out0 (VIDEO_DATA), a
-
-    ret
+    ld (cursor_pos), de
+    jr dpybusy
 
 ; On entry: DE = (y, x)
 DPYDELL:
@@ -197,7 +238,8 @@ blank_last_line:
     set 3, h
 
     ld (hl), 0
-    jr DMALDIR              ; [hl++] -> [de++]
+    call DMALDIR            ; [hl++] -> [de++]
+    jr dpybusy
 
 ; On entry: DE = (y, x)
 DPYINSL:
@@ -225,7 +267,8 @@ DPYINSL:
     call DMALDDR            ; [hl++] -> [de++]
 
     pop hl
-    jr clear_line_in_hl
+    call clear_line_in_hl
+    jr dpybusy
 
 ; On entry: DE = (y, x)
 DPYCLRL:
@@ -243,7 +286,8 @@ clear_line_in_hl:
     set 3, h                ; convert addresses to attribute space
     set 3, d
     ld (hl), 0
-    jr DMALDIR              ; [hl] -> [de]
+    call DMALDIR            ; [hl] -> [de]
+    jr dpybusy
 
 ; Clears rows d (inclusive) to e (exclusive).
 DPYCLRA:
@@ -296,9 +340,9 @@ DPYCLRA:
     set 3, h                ; convert addresses to attribute space
     set 3, d
     ld (hl), 0
-    jr DMALDIR              ; [hl] -> [de]
+    call DMALDIR            ; [hl] -> [de]
 
-    ret
+    jr dpybusy
 
 ; Clears the entire screen.
 DPYCLRS:
@@ -313,7 +357,8 @@ DPYCLRS:
     set 3, h                ; convert addresses to attribute space
     set 3, d
     ld (hl), 0
-    jr DMALDIR              ; [hl] -> [de]
+    call DMALDIR            ; [hl] -> [de]
+    jr dpybusy
 
 ; Flushes the backbuffer to the frontbuffer, if safe.
 DPYFLSH:
@@ -493,6 +538,8 @@ video_memory_address_table:
     dseg
 old_blanking: db 0
 displayed_bank: db 0
+is_idle: db 0
+cursor_pos: dw 0
 
     aseg
     ; Deliberately chosen so that setting bit 11 switches address to the

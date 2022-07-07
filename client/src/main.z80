@@ -18,6 +18,7 @@
     global DMALDDR
 
     maclib z180
+    maclib jif
 
 	cseg
 entry:
@@ -109,10 +110,10 @@ loop:
     call KBDPUSH        ; keyboard -> ring buffer
 
     call INTSTAT        ; returns z if interface is writeable
-    jr nz, .1
-    call KBDPULL        ; ring buffer -> c
-    call INTWRIT        ; c -> interface
-.1
+    jif z
+        call KBDPULL        ; ring buffer -> c
+        call INTWRIT        ; c -> interface
+    jendif
 
 	jr loop
 	ret

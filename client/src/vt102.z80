@@ -2,6 +2,7 @@
     extern DPYCLRL
     extern DPYCURS
     extern DPYDELL
+    extern DPYIDLE
     extern DPYINSL
     extern DPYPRNA
     extern DPYPRNU
@@ -40,7 +41,7 @@ TTYINIT:
 TTYPUTC:
     ld a, c
     or a
-    ret z
+    jr z, DPYIDLE
 
 	ld hl, (current_state)
 	jp (hl)
