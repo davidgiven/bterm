@@ -35,6 +35,7 @@
       <Data key="43ec2fa1-bf22-4b71-9477-b6ca7b97f0b0/23b8206d-1c77-4e61-be4a-b4037d5de5fc" value="UART_tx" />
       <Data key="43ec2fa1-bf22-4b71-9477-b6ca7b97f0b0/78e33e5d-45ea-4b75-88d5-73274e8a7ce4" value="UART_rx" />
       <Data key="0792a359-31bb-400a-b8fb-4241cd68cf54" value="VSYNCOUT_PIN" />
+      <Data key="2124d2a7-20a1-4f5c-a1cf-3a2b83a0c1ee" value="RTS" />
       <Data key="1425177d-0d0e-4468-8bcc-e638e5509a9b" value="Rx_1" />
       <Data key="ad18f62f-1db0-48c3-8c85-fbb621ff7f28" value="IOE_PIN" />
       <Data key="bb03222c-3259-455f-9809-69c1fed9f348" value="RD_PIN" />
@@ -1649,6 +1650,11 @@
         <Data key="Port Format" value="1,2" />
       </Group>
     </Group>
+    <Group key="2124d2a7-20a1-4f5c-a1cf-3a2b83a0c1ee">
+      <Group key="0">
+        <Data key="Port Format" value="1,5" />
+      </Group>
+    </Group>
     <Group key="1425177d-0d0e-4468-8bcc-e638e5509a9b">
       <Group key="0">
         <Data key="Port Format" value="1,4" />
@@ -1692,7 +1698,7 @@
     </Group>
     <Group key="df634b25-1b8b-4063-b066-2e9e36042cc7">
       <Group key="0">
-        <Data key="Port Format" value="1,0" />
+        <Data key="Port Format" value="1,4" />
       </Group>
     </Group>
     <Group key="e851a3b9-efb8-48be-bbb8-b303b216c393">
