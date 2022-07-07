@@ -15,6 +15,7 @@
     global TTYTYPD
 
     maclib constants
+    maclib jif
 
 NPARS = 16
 
@@ -161,55 +162,57 @@ defstate csi
     ld a, c
 
     cp '?'          ; 'private' flag
-    jr nz, .1
-    ld hl, commandflags
-    set COMMANDFLAG_PRIVATE_BIT, (hl)
-    ret
-.1
+    jif z
+        ld hl, commandflags
+        set COMMANDFLAG_PRIVATE_BIT, (hl)
+        ret
+    jendif
+
     cp ';'          ; advance to next parameter
-    jr nz, .2
-    ld hl, currentparam
-    ld a, (hl)
-    cp NPARS - 1
-    ret z
-    inc (hl)
-    ret
-.2
+    jif z
+        ld hl, currentparam
+        ld a, (hl)
+        cp NPARS - 1
+        ret z
+        inc (hl)
+        ret
+    jendif
+
     cp '0'
     jr c, set_state_waiting     ; invalid char, give up
     cp '9'+1
-    jr nc, .3                   ; not a digit, must have command byte
+    jif c                       ; if it's a digit, this is a number
+        ; Parse decimal parameter: first calculate the parameter address
+        ld a, (currentparam)
+        add a
+        ld hl, parameters
+        adda16 h, l
+        ; Load parameter
+        ld e, (hl)
+        inc hl
+        ld d, (hl)
+        ex de, hl                   ; parameter -> hl, address+1 -> de
+        ; Multiply by ten: x*10 = (x*8) + (x*2)
+        add hl, hl                  ; hl = parameter * 2
+        push bc
+        ld b, h
+        ld c, l                     ; bc = parameter * 2
+        add hl, hl                  ; hl = parameter * 4
+        add hl, hl                  ; hl = parameter * 8
+        add hl, bc                  ; hl = parameter * 8 + parameter * 2
+        pop bc
+        ; Add digit
+        ld a, c
+        sub '0'
+        adda16 h, l
+        ; Store parameter
+        ex de, hl                   ; address+1 -> hl, parameter -> de
+        ld (hl), d
+        dec hl
+        ld (hl), e
+        ret
+    jendif
 
-    ; Parse decimal parameter: first calculate the parameter address
-    ld a, (currentparam)
-    add a
-    ld hl, parameters
-    adda16 h, l
-    ; Load parameter
-    ld e, (hl)
-    inc hl
-    ld d, (hl)
-    ex de, hl                   ; parameter -> hl, address+1 -> de
-    ; Multiply by ten: x*10 = (x*8) + (x*2)
-    add hl, hl                  ; hl = parameter * 2
-    push bc
-    ld b, h
-    ld c, l                     ; bc = parameter * 2
-    add hl, hl                  ; hl = parameter * 4
-    add hl, hl                  ; hl = parameter * 8
-    add hl, bc                  ; hl = parameter * 8 + parameter * 2
-    pop bc
-    ; Add digit
-    ld a, c
-    sub '0'
-    adda16 h, l
-    ; Store parameter
-    ex de, hl                   ; address+1 -> hl, parameter -> de
-    ld (hl), d
-    dec hl
-    ld (hl), e
-    ret
-.3
     ; If we got here, we're a command byte
     call set_state_waiting
     ld hl, commandflags
@@ -229,30 +232,33 @@ csi_non_private:
     cp 'D'
     jr z, do_csi_cub
     cp 'E'              ; CNL, move down and go to column one
-    jr nz, .1
-    xor a
-    ld (cursorx), a
-    jr do_csi_cud
-.1
+    jif z
+        xor a
+        ld (cursorx), a
+        jr do_csi_cud
+    jendif
+
     cp 'F'              ; CPL, move dup and go to column one
-    jr nz, .2
-    xor a
-    ld (cursorx), a
-    jr do_csi_cuu
-.2
+    jif z
+        xor a
+        ld (cursorx), a
+        jr do_csi_cuu
+    jendif
+
     cp 'G'
     jr z, do_csi_cha
     cp 'H'
     jr z, do_csi_cup
     cp 'J'              ; ED, erase display
-    jr nz, .3
-    ld a, (parameters+0)
-    or a
-    jr z, do_ed_cursor_to_end
-    dec a
-    jr z, do_ed_start_to_cursor
-    jr do_ed_all
-.3
+    jif z
+        ld a, (parameters+0)
+        or a
+        jr z, do_ed_cursor_to_end
+        dec a
+        jr z, do_ed_start_to_cursor
+        jr do_ed_all
+    jendif
+
     cp 'K'              ; EL, erase line
     jr nz, .4
     ld a, (parameters+0)
@@ -284,14 +290,14 @@ do_csi_cuu:
     ld hl, cursory
     ld a, (parameters+0)
     or a
-    jr nz, .2
-    inc a
-.2
+    jif z
+        inc a
+    jendif
     neg
     add (hl)
-    jr c, .1
-    xor a
-.1
+    jif nc
+        xor a
+    jendif
     ld (cursory), a
     jr update_cursor
 
@@ -300,14 +306,14 @@ do_csi_cud:
     ld hl, cursory
     ld a, (parameters+0)
     or a
-    jr nz, .2
-    inc a
-.2
+    jif z
+        inc a
+    jendif
     add (hl)
     cp SCREEN_HEIGHT
-    jr c, .1
-    ld a, SCREEN_HEIGHT-1
-.1
+    jif nc
+        ld a, SCREEN_HEIGHT-1
+    jendif
     ld (cursory), a
     jr update_cursor
 
@@ -316,14 +322,14 @@ do_csi_cub:
     ld hl, cursorx
     ld a, (parameters+0)
     or a
-    jr nz, .2
-    inc a
-.2
+    jif z
+        inc a
+    jendif
     neg
     add (hl)
-    jr c, .1
-    xor a
-.1
+    jif nc
+        xor a
+    jendif
     ld (cursorx), a
     jr update_cursor
 
@@ -332,14 +338,14 @@ do_csi_cuf:
     ld hl, cursorx
     ld a, (parameters+0)
     or a
-    jr nz, .2
-    inc a
-.2
+    jif z
+        inc a
+    jendif
     add (hl)
     cp SCREEN_WIDTH
-    jr c, .1
-    ld a, SCREEN_WIDTH-1
-.1
+    jif nc
+        ld a, SCREEN_WIDTH-1
+    jendif
     ld (cursorx), a
     jr update_cursor
 
@@ -455,9 +461,10 @@ do_csi_el_all:
 do_csi_il:
     ld a, (parameters+0)
     or a
-    jr nz, .1
-    inc a
-.1
+    jif z
+        inc a
+    jendif
+
     ld b, a
 .2
     push bc
@@ -472,9 +479,10 @@ do_csi_il:
 do_csi_dl:
     ld a, (parameters+0)
     or a
-    jr nz, .1
-    inc a
-.1
+    jif z
+        inc a
+    jendif
+
     ld b, a
 .2
     push bc
@@ -564,11 +572,6 @@ do_csi_sgr:
     djnz .1
     ret
 
-all_attributes_off:
-    xor a
-    ld (attributes), a
-    ret
-
 ; Set attribute in de.
 set_attribute:
     ld a, d
@@ -578,37 +581,47 @@ set_attribute:
     ld hl, attributes
     ld a, e
     cp 0                ; all off
-    jr z, all_attributes_off
+    jif z
+        xor a
+        ld (attributes), a
+        ret
+    jendif
 
     cp 1                ; bold on
-    jr nz, .1
-    set ATTRIBUTE_BOLD_BIT, (hl)
-    ret
-.1
+    jif z
+        set ATTRIBUTE_BOLD_BIT, (hl)
+        ret
+    jendif
+
     cp 4                ; underline on
-    jr nz, .2
-    set ATTRIBUTE_UNDERLINE_BIT, (hl)
-    ret
-.2
+    jif z
+        set ATTRIBUTE_UNDERLINE_BIT, (hl)
+        ret
+    jendif
+
     cp 7                ; reverse video on
-    jr nz, .3
-    set ATTRIBUTE_REVERSE_BIT, (hl)
-    ret
-.3
+    jif z
+        set ATTRIBUTE_REVERSE_BIT, (hl)
+        ret
+    jendif
+
     cp 22               ; bold off
-    jr nz, .4
-    res ATTRIBUTE_BOLD_BIT, (hl)
-    ret
-.4
+    jif z
+        res ATTRIBUTE_BOLD_BIT, (hl)
+        ret
+    jendif
+
     cp 24               ; underline off
-    jr nz, .5
-    res ATTRIBUTE_UNDERLINE_BIT, (hl)
-    ret
-.5
+    jif z
+        res ATTRIBUTE_UNDERLINE_BIT, (hl)
+        ret
+    jendif
+
     cp 27               ; reverse video off
-    jr nz, .6
-    res ATTRIBUTE_REVERSE_BIT, (hl)
-.6
+    jif z
+        res ATTRIBUTE_REVERSE_BIT, (hl)
+        ; fall through
+    jendif
     ret
 
 ; --- Simple motion ---------------------------------------------------------
@@ -695,15 +708,16 @@ sety:
 start_utf8_sequence:
     call parse_utf8_leader
     or a
-    jr z, .1
-    ld (pending_utf8_bytes), a
-    ld a, b
-    and c           ; mask leader byte
-    ld l, a
-    ld h, 0
-    ld (utf8_char), hl
-    jr set_state_utf8_trailer
-.1
+    jif nz
+        ld (pending_utf8_bytes), a
+        ld a, b
+        and c           ; mask leader byte
+        ld l, a
+        ld h, 0
+        ld (utf8_char), hl
+        jr set_state_utf8_trailer
+    jendif
+
     ; Got an invalid UTF-8 byte
     ld a, 0x7f
     and c           ; crudely convert to ASCII
@@ -713,39 +727,44 @@ parse_utf8_leader:
 	ld a, c
 	srl a
 	cp 0x7e			; 01111110, 6-byte sequence
-	jr nz, .1
-	ld a, 5			; number of remaining bytes
-	ld b, 0x01		; leading char mask
-	ret
-.1
+    jif z
+        ld a, 5			; number of remaining bytes
+        ld b, 0x01		; leading char mask
+        ret
+    jendif
+
 	srl a
 	cp 0x3e         ; 00111110, 5-byte sequence
-	jr nz, .2
-	ld a, 4			; number of remaining bytes
-	ld b, 0x03		; leading char mask
-	ret
-.2
+    jif z
+        ld a, 4			; number of remaining bytes
+        ld b, 0x03		; leading char mask
+        ret
+    jendif
+
 	srl a
 	cp 0x1e         ; 00011110, 4-byte sequence
-	jr nz, .3
-	ld a, 3			; number of remaining bytes
-	ld b, 0x07		; leading char mask
-	ret
-.3
+    jif z
+        ld a, 3			; number of remaining bytes
+        ld b, 0x07		; leading char mask
+        ret
+    jendif
+
 	srl a
 	cp 0x0e         ; 00001110, 3-byte sequence
-	jr nz, .4
-	ld a, 2			; number of remaining bytes
-	ld b, 0x0f		; leading char mask
-	ret
-.4
+    jif z
+        ld a, 2			; number of remaining bytes
+        ld b, 0x0f		; leading char mask
+        ret
+    jendif
+
 	srl a
 	cp 0x06         ; 00000110, 2-byte sequence
-	jr nz, .5
-	ld a, 1			; number of remaining bytes
-	ld b, 0x1f		; leading char mask
-	ret
-.5
+    jif z
+        ld a, 1			; number of remaining bytes
+        ld b, 0x1f		; leading char mask
+        ret
+    jendif
+
 	; invalid UTF-8 character
     ld a, 0
     ret

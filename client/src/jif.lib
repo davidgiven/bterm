@@ -4,62 +4,20 @@ jif_neg_nz = 1
 jif_neg_c = 2
 jif_neg_nc = 3
 
-jinsn macro cc, num, str
-	if num == 0
-		if jif_neg_`cc == jif_neg_nz
-			jr z, j`str
-		else
-			if jif_neg_`cc == jif_neg_z
-				jr nz, j`str
-			else
-				if jif_neg_`cc == jif_neg_c
-					jr nc, j`str
-				else
-					if jif_neg_`cc == jif_neg_nc
-						jr c, j`str
-					else
-						error
-					endif
-				endif
-			endif
-		endif
+jinsn macro cc, num
+	if jif_neg_`cc == jif_neg_nz
+		jr z, j`num
 	else
-		if num % 10 == 0
-			jinsn cc, num/10, str`0
+		if jif_neg_`cc == jif_neg_z
+			jr nz, j`num
 		else
-			if num % 10 == 1
-				jinsn cc, num/10, str`1
+			if jif_neg_`cc == jif_neg_c
+				jr nc, j`num
 			else
-				if num % 10 == 2
-					jinsn cc, num/10, str`2
+				if jif_neg_`cc == jif_neg_nc
+					jr c, j`num
 				else
-					if num % 10 == 3
-						jinsn cc, num/10, str`3
-					else
-						if num % 10 == 4
-							jinsn cc, num/10, str`4
-						else
-							if num % 10 == 5
-								jinsn cc, num/10, str`5
-							else
-								if num % 10 == 6
-									jinsn cc, num/10, str`6
-								else
-									if num % 10 == 7
-										jinsn cc, num/10, str`7
-									else
-										if num % 10 == 8
-											jinsn cc, num/10, str`8
-										else
-											if num % 10 == 9
-												jinsn cc, num/10, str`9
-											endif
-										endif
-									endif
-								endif
-							endif
-						endif
-					endif
+					error
 				endif
 			endif
 		endif
@@ -67,49 +25,7 @@ jinsn macro cc, num, str
 endm
 
 jlabel macro num, str
-	if num == 0
-		j`str`:
-	else
-		if num % 10 == 0
-			jlabel num/10, str`0
-		else
-			if num % 10 == 1
-				jlabel num/10, str`1
-			else
-				if num % 10 == 2
-					jlabel num/10, str`2
-				else
-					if num % 10 == 3
-						jlabel num/10, str`3
-					else
-						if num % 10 == 4
-							jlabel num/10, str`4
-						else
-							if num % 10 == 5
-								jlabel num/10, str`5
-							else
-								if num % 10 == 6
-									jlabel num/10, str`6
-								else
-									if num % 10 == 7
-										jlabel num/10, str`7
-									else
-										if num % 10 == 8
-											jlabel num/10, str`8
-										else
-											if num % 10 == 9
-												jlabel num/10, str`9
-											endif
-										endif
-									endif
-								endif
-							endif
-						endif
-					endif
-				endif
-			endif
-		endif
-	endif
+	j`num:
 endm
 
 jstack0 = 0
@@ -152,12 +68,12 @@ jj = 1
 jif	macro cc
 	jpush
 	jstack0 = jj
-	jinsn cc, jj
+	jinsn cc, %jj
 	jj = jj + 1
 endm
 
 jendif macro
-	jlabel jstack0
+	jlabel %jstack0
 	jpop
 endm
 

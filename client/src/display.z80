@@ -163,27 +163,27 @@ DPYCURS:
 DPYDELL:
     ld a, SCREEN_HEIGHT-1
     cp d
-    jr z, blank_last_line   ; on the last line?
+    jif nz                  ; not on the last line?
+        ld e, 0                 ; x = 0
+        call calc_backbuffer_address ; line address -> hl
 
-    ld e, 0                 ; x = 0
-    call calc_backbuffer_address ; line address -> hl
+        ex de, hl               ; line address -> de
+        ld hl, back_buffer_end - SCREEN_WIDTH
+        ccf
+        sbc hl, de
+        ld b, h
+        ld c, l                 ; amount to copy -> bc
 
-    ex de, hl               ; line address -> de
-    ld hl, back_buffer_end - SCREEN_WIDTH
-    ccf
-    sbc hl, de
-    ld b, h
-    ld c, l                 ; amount to copy -> bc
+        ld h, d
+        ld l, e
+        ld a, SCREEN_WIDTH
+        adda16 h, l             ; line+1 -> hl, line -> de
+        call DMALDIR            ; [hl++] -> [de++]
 
-    ld h, d
-    ld l, e
-    ld a, SCREEN_WIDTH
-    adda16 h, l             ; line+1 -> hl, line -> de
-    call DMALDIR            ; [hl++] -> [de++]
-
-    set 3, d                ; convert addresses to attribute
-    set 3, h
-    call DMALDIR            ; [hl++] -> [de++]
+        set 3, d                ; convert addresses to attribute
+        set 3, h
+        call DMALDIR            ; [hl++] -> [de++]
+    jendif
 
 blank_last_line:
     ld hl, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH
