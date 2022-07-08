@@ -68,7 +68,8 @@ issue](https://github.com/davidgiven/bterm/issues/new/choose) and I'll see what
 I can do to help. Or just send me an email (see below).
 
 
-Who?  ----
+Who?
+----
 
 I am David Given, a.k.a. hjalfi in various places. Feel free to send me email
 at [dg@cowlark.com](mailto:dg@cowlark.com). You may also [like to visit my
@@ -76,7 +77,8 @@ website](http://cowlark.com); there may or may not be something interesting
 there.
 
 
-License?  --------
+License?
+--------
 
 Everything I wrote, which is nearly everything, is freely redistributable under
 the terms of the simplified 2-clause BSD license. tl;dr: go nuts, just don't
