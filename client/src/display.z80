@@ -210,10 +210,11 @@ DPYDELL:
 
         ex de, hl               ; line address -> de
         ld hl, back_buffer_end - SCREEN_WIDTH
-        ccf
+        scf
         sbc hl, de
         ld b, h
         ld c, l                 ; amount to copy -> bc
+        inc bc
 
         ld h, d
         ld l, e
@@ -253,18 +254,19 @@ DPYINSL:
 
     ex de, hl               ; line address -> de
     ld hl, back_buffer_end - SCREEN_WIDTH
-    ccf
+    scf
     sbc hl, de
     ld b, h
     ld c, l                 ; amount to copy -> bc
+    inc bc
 
     ld hl, back_buffer + (SCREEN_HEIGHT-2)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
     ld de, back_buffer + (SCREEN_HEIGHT-1)*SCREEN_WIDTH + (SCREEN_WIDTH-1)
     call DMALDDR            ; [hl--] -> [de--]
 
-    set 3, d                ; convert addresses to attribute
+    set 3, d                ; convert addresses to point to attribute space
     set 3, h
-    call DMALDDR            ; [hl++] -> [de++]
+    call DMALDDR            ; [hl--] -> [de--]
 
     pop hl
     call clear_line_in_hl

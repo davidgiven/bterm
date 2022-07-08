@@ -119,6 +119,7 @@ loop:
 	ret
 
     ; Memory-to-memory only, no video memory!
+    ; Does not modify any registers other than A (unlike the real ldir).
 DMALDIR:
     ld a, 0x02
 do_dma:
